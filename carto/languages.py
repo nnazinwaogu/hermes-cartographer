@@ -8,8 +8,11 @@ exception: one broken file must not break the index.
 from __future__ import annotations
 
 import ast
+import builtins
 import re
 from dataclasses import dataclass, field
+
+_BUILTIN_NAMES = frozenset(dir(builtins))
 
 _LANG_BY_SUFFIX = {
     ".py": "python",
@@ -172,8 +175,50 @@ def _walk_symbols(
                 _add_symbol(out, rel_path, node, target.id, "constant", target.id, "")
 
 
+def _snippet(lines: list[str], lineno: int) -> str:
+    if 1 <= lineno <= len(lines):
+        return lines[lineno - 1].strip()[:160]
+    return ""
+
+
+def collect_python_refs(tree: ast.AST, rel_path: str, lines: list[str]) -> list[Ref]:
+    """Collect loaded names and attribute accesses with exact positions.
+
+    ``ast`` reports columns as UTF-8 byte offsets; an attribute's start is its
+    end offset minus the name's encoded length, because the attribute has no
+    offset of its own.
+    """
+    seen: set[tuple[str, int, int, str]] = set()
+    refs: list[Ref] = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            name = node.id
+            if not isinstance(node.ctx, ast.Load) or len(name) <= 1 or name in _BUILTIN_NAMES:
+                continue
+            kind = "name"
+            col = node.col_offset
+        elif isinstance(node, ast.Attribute):
+            name = node.attr
+            if len(name) <= 1:
+                continue
+            kind = "attr"
+            col = node.end_col_offset - len(name.encode("utf-8"))
+        else:
+            continue
+
+        key = (name, node.lineno, col, kind)
+        if key in seen:
+            continue
+        seen.add(key)
+        refs.append(Ref(rel_path, name, node.lineno, col, kind, _snippet(lines, node.lineno)))
+
+    refs.sort(key=lambda ref: (ref.lineno, ref.col))
+    return refs
+
+
 def scan_python(rel_path: str, text: str) -> FileScan:
-    """Collect Python symbols. References are added by ``collect_python_refs``."""
+    """Collect Python symbols and references. A broken file yields an empty scan."""
     lines = text.splitlines()
     try:
         tree = ast.parse(text)
@@ -182,7 +227,11 @@ def scan_python(rel_path: str, text: str) -> FileScan:
 
     symbols: list[Symbol] = []
     _walk_symbols(tree.body, rel_path, "", "", symbols)
-    return FileScan(symbols=symbols, lines=len(lines))
+    return FileScan(
+        symbols=symbols,
+        refs=collect_python_refs(tree, rel_path, lines),
+        lines=len(lines),
+    )
 
 
 @dataclass(frozen=True)

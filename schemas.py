@@ -51,3 +51,27 @@ SYMBOL_FIND = {
     "additionalProperties": False,
     "required": ["name"],
 }
+
+SYMBOL_REFS = {
+    "type": "object",
+    "properties": {
+        "name": {
+            "type": "string",
+            "description": "Name whose references to list.",
+        },
+        "include_attributes": {
+            "type": "boolean",
+            "description": "Include attribute accesses such as obj.name. Defaults to false; Python references are AST-precise.",
+        },
+        "limit": {
+            "type": "integer",
+            "description": "Maximum references to return. Defaults to 100.",
+        },
+        "path": {
+            "type": "string",
+            "description": "Repository root to operate on. Defaults to the current workspace.",
+        },
+    },
+    "additionalProperties": False,
+    "required": ["name"],
+}

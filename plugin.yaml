@@ -10,6 +10,7 @@ requires_hermes: ">=0.23.0"
 provides_tools:
   - code_map
   - symbol_find
+  - symbol_refs
 tags:
   - code-intelligence
   - navigation

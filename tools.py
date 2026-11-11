@@ -14,7 +14,7 @@ from .carto.errors import CartoError
 from .carto.indexer import open_store
 from .carto.maps import render_map
 from .carto.paths import resolve_root
-from .carto.query import find_definitions
+from .carto.query import find_definitions, find_references
 from .carto.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -88,3 +88,36 @@ def symbol_find(args: dict, **kwargs) -> str:
     except Exception as exc:  # noqa: BLE001 - a handler must never raise
         logger.exception("symbol_find failed")
         return _error(f"symbol_find failed: {exc}", "check the arguments and try again")
+
+
+def symbol_refs(args: dict, **kwargs) -> str:
+    """List references to a name: AST-precise for Python, on-disk scan elsewhere."""
+    try:
+        name = str(args.get("name") or "").strip()
+        if not name:
+            return _error("name is required", "pass name=<symbol name>")
+        root, settings = _root_and_settings(args, **kwargs)
+        store = open_store(root, settings)
+        try:
+            refs, meta = find_references(
+                store,
+                name,
+                limit=_limit(args.get("limit"), 100),
+                include_attributes=bool(args.get("include_attributes")),
+            )
+        finally:
+            store.close()
+        return json.dumps(
+            {
+                "name": name,
+                "refs": refs,
+                "count": meta["count"],
+                "truncated": meta["truncated"],
+                "scanned_files": meta["scanned_files"],
+            }
+        )
+    except CartoError as exc:
+        return _error(str(exc), "check the name and the path")
+    except Exception as exc:  # noqa: BLE001 - a handler must never raise
+        logger.exception("symbol_refs failed")
+        return _error(f"symbol_refs failed: {exc}", "check the arguments and try again")

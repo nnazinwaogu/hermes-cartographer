@@ -35,8 +35,8 @@ class IndexerTests(unittest.TestCase):
 
     def test_first_sync_indexes_every_file(self):
         report = self.run_sync()
-        self.assertEqual(report.scanned, 6)
-        self.assertEqual(report.indexed, 6)
+        self.assertEqual(report.scanned, 7)
+        self.assertEqual(report.indexed, 7)
         self.assertEqual(report.removed, 0)
         self.assertFalse(report.truncated)
         self.assertGreater(report.symbols, 0)
@@ -83,6 +83,12 @@ class IndexerTests(unittest.TestCase):
         # Nothing walked, nothing pruned: the previous index is intact.
         store = self.open_store()
         self.assertEqual(store.counts()["symbols"], first.symbols)
+
+    def test_undefined_name_refs_survive_resync(self):
+        self.run_sync()
+        self.run_sync(force=True)
+        store = self.open_store()
+        self.assertTrue(store.references("json"), "external-name refs must survive a re-index")
 
 
 if __name__ == "__main__":

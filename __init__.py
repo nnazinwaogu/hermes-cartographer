@@ -43,3 +43,10 @@ def register(ctx) -> None:
         handler=tools.symbol_find,
         description="Find symbol definitions",
     )
+    ctx.register_tool(
+        name="symbol_refs",
+        toolset="cartographer",
+        schema=schemas.SYMBOL_REFS,
+        handler=tools.symbol_refs,
+        description="Find symbol references",
+    )

@@ -78,6 +78,21 @@ class PythonScanTests(unittest.TestCase):
         self.assertEqual(scan.refs, [])
         self.assertEqual(scan.lines, 4)
 
+    def test_python_refs(self):
+        scan = languages.scan_python("usecore.py", fixture("project_a/usecore.py"))
+        run = [(r.lineno, r.col, r.kind) for r in scan.refs if r.name == "run"]
+        self.assertEqual(run, [(8, 18, "attr")])
+        engine = [(r.lineno, r.col, r.kind) for r in scan.refs if r.name == "engine"]
+        self.assertEqual(engine, [(8, 11, "name")])
+
+    def test_python_refs_skip_builtins_and_dedupe(self):
+        scan = languages.scan_python("core.py", fixture("project_a/core.py"))
+        names = [r.name for r in scan.refs]
+        self.assertNotIn("str", names)
+        self.assertNotIn("int", names)
+        keys = {(r.name, r.lineno, r.col, r.kind) for r in scan.refs}
+        self.assertEqual(len(keys), len(scan.refs))
+
 
 class GenericScanTests(unittest.TestCase):
     def test_generic_js(self):

@@ -71,6 +71,47 @@ class QueryTests(unittest.TestCase):
         with self.assertRaises(load_submodule("carto.errors").CartoError):
             query.find_definitions(self.store, "Engine", mode="regex")
 
+    def test_refs_attribute_excluded_by_default(self):
+        refs, _meta = query.find_references(self.store, "run")
+        self.assertEqual(refs, [])
+        refs, _meta = query.find_references(self.store, "run", include_attributes=True)
+        self.assertEqual(
+            [(r["path"], r["line"], r["column"], r["kind"]) for r in refs],
+            [("usecore.py", 8, 18, "attr")],
+        )
+
+    def test_refs_undefined_name_findable(self):
+        refs, meta = query.find_references(self.store, "json")
+        self.assertEqual(
+            [(r["path"], r["line"], r["column"]) for r in refs], [("external.py", 7, 11)]
+        )
+        self.assertEqual(meta["scanned_files"], 0)
+
+
+class GenericReferenceTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = FIXTURES / "project_js"
+        self.db = Path(self._tmp.name) / "index.db"
+        indexer.sync(self.root, Settings(), db_path=self.db)
+        self.store = store_module.Store(self.db, self.root)
+        self.addCleanup(self.store.close)
+
+    def test_refs_generic_scan(self):
+        refs, meta = query.find_references(self.store, "startServer")
+        self.assertGreater(meta["scanned_files"], 0)
+        self.assertEqual(
+            refs,
+            [{
+                "path": "use.js",
+                "line": 6,
+                "column": 9,
+                "kind": "name",
+                "snippet": "return startServer(port);",
+            }],
+        )
+
 
 class SymbolFindToolTests(unittest.TestCase):
     def setUp(self):
@@ -97,6 +138,32 @@ class SymbolFindToolTests(unittest.TestCase):
 
     def test_missing_name_is_error_envelope(self):
         payload = json.loads(tools.symbol_find({"path": FIXTURES / "project_a"}))
+        self.assertIn("error", payload)
+        self.assertIn("hint", payload)
+
+
+class SymbolRefsToolTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        db = Path(self._tmp.name) / "index.db"
+        patcher = mock.patch.object(indexer, "db_path_for", return_value=db)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_envelope(self):
+        payload = json.loads(
+            tools.symbol_refs({"path": FIXTURES / "project_a", "name": "json"})
+        )
+        self.assertEqual(
+            set(payload), {"name", "refs", "count", "truncated", "scanned_files"}
+        )
+        self.assertEqual(payload["name"], "json")
+        self.assertGreaterEqual(payload["count"], 1)
+        self.assertFalse(payload["truncated"])
+
+    def test_missing_name_is_error_envelope(self):
+        payload = json.loads(tools.symbol_refs({"path": FIXTURES / "project_a"}))
         self.assertIn("error", payload)
         self.assertIn("hint", payload)
 

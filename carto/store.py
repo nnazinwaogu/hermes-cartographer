@@ -202,12 +202,22 @@ class Store:
             )
         ]
 
-    def references(self, name: str, limit: int = 100) -> list[dict]:
+    def references(self, name: str, limit: int | None = 100) -> list[dict]:
+        sql = (
+            "SELECT * FROM refs WHERE name = ? COLLATE NOCASE "
+            "ORDER BY path, lineno, col"
+        )
+        params: list[object] = [name]
+        if limit is not None:
+            sql += " LIMIT ?"
+            params.append(limit)
+        return [dict(row) for row in self._conn.execute(sql, params)]
+
+    def non_python_files(self) -> list[tuple[str, str]]:
         return [
-            dict(row)
+            (row["path"], row["lang"])
             for row in self._conn.execute(
-                "SELECT * FROM refs WHERE name = ? COLLATE NOCASE ORDER BY path, lineno, col LIMIT ?",
-                (name, limit),
+                "SELECT path, lang FROM files WHERE lang != 'python' ORDER BY path"
             )
         ]
 
