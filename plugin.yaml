@@ -12,6 +12,8 @@ provides_tools:
   - symbol_find
   - symbol_refs
   - symbol_rename
+provides_hooks:
+  - pre_llm_call
 tags:
   - code-intelligence
   - navigation

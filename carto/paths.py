@@ -54,6 +54,25 @@ def rel_posix(root: Path, path: Path) -> str:
     return path.relative_to(root).as_posix()
 
 
+_ROOT_MARKERS = (".git", "pyproject.toml", "package.json", "go.mod")
+
+
+def detect_root(start: Path) -> Path:
+    """Walk up from *start* to the first directory holding a project marker.
+
+    Returns *start* unchanged when no marker is found within 12 levels.
+    """
+    start = Path(start).expanduser().resolve()
+    current = start
+    for _ in range(12):
+        if any((current / marker).exists() for marker in _ROOT_MARKERS):
+            return current
+        if current.parent == current:
+            break
+        current = current.parent
+    return start
+
+
 def iter_source_files(
     root: Path, settings: Settings, state: WalkState | None = None
 ) -> Iterator[Path]:
