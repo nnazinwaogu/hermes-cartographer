@@ -19,6 +19,7 @@ from .store import Store
 logger = logging.getLogger(__name__)
 
 PLUGIN_NAME = "hermes-cartographer"
+_BATCH_FILES = 200
 
 
 @dataclass
@@ -85,6 +86,12 @@ def sync(
     state = WalkState()
     walked: set[str] = set()
     scanned = indexed = 0
+    pending = 0
+    bulk = force or store.counts()["files"] == 0
+    if bulk:
+        # A fresh/forced build inserts hundreds of thousands of rows in random
+        # name order; building the name indexes once at the end is far cheaper.
+        store.begin_bulk()
 
     try:
         for path in iter_source_files(root, settings, state):
@@ -111,11 +118,18 @@ def sync(
                     scan.lines,
                     scan.symbols,
                     scan.refs,
+                    commit=False,
                 )
                 indexed += 1
+                pending += 1
+                if pending >= _BATCH_FILES:
+                    store.commit()
+                    pending = 0
             except Exception:  # noqa: BLE001 - one bad file must not abort the sync
-                state.unreadable += 1
                 logger.debug("cartographer: skipped %s", rel_path, exc_info=True)
+        store.commit()
+        if bulk:
+            store.end_bulk()
 
         removed = 0
         if not state.truncated:

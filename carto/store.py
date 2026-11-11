@@ -52,10 +52,6 @@ CREATE INDEX IF NOT EXISTS ix_refs_name ON refs(name COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS ix_refs_path ON refs(path);
 """
 
-_SYMBOL_COLUMNS = ("path", "name", "qualname", "kind", "lineno", "end_lineno", "signature", "parent")
-_REF_COLUMNS = ("path", "name", "lineno", "col", "kind", "snippet")
-
-
 def _escape_like(value: str) -> str:
     """Escape LIKE metacharacters so ``_work`` matches only itself."""
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -72,6 +68,8 @@ class Store:
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
+        self._conn.execute("PRAGMA cache_size=-65536")
+        self._conn.execute("PRAGMA temp_store=MEMORY")
 
     def close(self) -> None:
         self._conn.close()
@@ -86,6 +84,23 @@ class Store:
         with self._conn:
             self._conn.executescript(_SCHEMA)
             self._conn.execute("PRAGMA user_version=1")
+
+    def begin_bulk(self) -> None:
+        """Drop the random-order name indexes for a fresh build; ``end_bulk`` rebuilds them."""
+        with self._conn:
+            self._conn.execute("PRAGMA synchronous=OFF")
+            self._conn.execute("DROP INDEX IF EXISTS ix_symbols_name")
+            self._conn.execute("DROP INDEX IF EXISTS ix_refs_name")
+
+    def end_bulk(self) -> None:
+        with self._conn:
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS ix_symbols_name ON symbols(name COLLATE NOCASE)"
+            )
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS ix_refs_name ON refs(name COLLATE NOCASE)"
+            )
+            self._conn.execute("PRAGMA synchronous=NORMAL")
 
     # -- meta ---------------------------------------------------------------
 
@@ -119,29 +134,62 @@ class Store:
         lines: int,
         symbols: Sequence[Symbol],
         refs: Sequence[Ref],
+        commit: bool = True,
     ) -> None:
-        """Replace every row for *path* in one transaction: no stale symbols or refs survive."""
-        with self._conn:
-            self._conn.execute("DELETE FROM symbols WHERE path = ?", (path,))
-            self._conn.execute("DELETE FROM refs WHERE path = ?", (path,))
-            self._conn.execute("DELETE FROM files WHERE path = ?", (path,))
-            self._conn.execute(
-                "INSERT INTO files(path, lang, size, mtime_ns, digest, lines, symbol_count) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (path, lang, size, mtime_ns, digest, lines, len(symbols)),
-            )
-            self._conn.executemany(
-                "INSERT INTO symbols(path, name, qualname, kind, lineno, end_lineno, signature, parent) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                [
-                    (s.path, s.name, s.qualname, s.kind, s.lineno, s.end_lineno, s.signature, s.parent)
-                    for s in symbols
-                ],
-            )
-            self._conn.executemany(
-                "INSERT INTO refs(path, name, lineno, col, kind, snippet) VALUES (?, ?, ?, ?, ?, ?)",
-                [(r.path, r.name, r.lineno, r.col, r.kind, r.snippet) for r in refs],
-            )
+        """Replace every row for *path*: no stale symbols or refs survive.
+
+        ``commit=False`` keeps the connection's transaction open (wrapped in a
+        savepoint so one bad file cannot poison the batch); ``sync`` batches to
+        avoid one fsync per file on large trees.
+        """
+        if commit:
+            with self._conn:
+                self._write_file_rows(path, lang, size, mtime_ns, digest, lines, symbols, refs)
+            return
+        self._conn.execute("SAVEPOINT replace_file")
+        try:
+            self._write_file_rows(path, lang, size, mtime_ns, digest, lines, symbols, refs)
+        except BaseException:
+            self._conn.execute("ROLLBACK TO replace_file")
+            self._conn.execute("RELEASE replace_file")
+            raise
+        self._conn.execute("RELEASE replace_file")
+
+    def _write_file_rows(
+        self,
+        path: str,
+        lang: str,
+        size: int,
+        mtime_ns: int,
+        digest: str,
+        lines: int,
+        symbols: Sequence[Symbol],
+        refs: Sequence[Ref],
+    ) -> None:
+        self._conn.execute("DELETE FROM symbols WHERE path = ?", (path,))
+        self._conn.execute("DELETE FROM refs WHERE path = ?", (path,))
+        self._conn.execute("DELETE FROM files WHERE path = ?", (path,))
+        self._conn.execute(
+            "INSERT INTO files(path, lang, size, mtime_ns, digest, lines, symbol_count) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (path, lang, size, mtime_ns, digest, lines, len(symbols)),
+        )
+        self._conn.executemany(
+            "INSERT INTO symbols(path, name, qualname, kind, lineno, end_lineno, signature, parent) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (s.path, s.name, s.qualname, s.kind, s.lineno, s.end_lineno, s.signature, s.parent)
+                for s in symbols
+            ],
+        )
+        self._conn.executemany(
+            "INSERT INTO refs(path, name, lineno, col, kind, snippet) VALUES (?, ?, ?, ?, ?, ?)",
+            [(r.path, r.name, r.lineno, r.col, r.kind, r.snippet) for r in refs],
+        )
+
+    def commit(self) -> None:
+        """Commit the open batch started by ``replace_file(commit=False)``."""
+        self._conn.commit()
 
     def delete_file(self, path: str) -> None:
         with self._conn:
@@ -151,12 +199,6 @@ class Store:
 
     def all_paths(self) -> set[str]:
         return {row["path"] for row in self._conn.execute("SELECT path FROM files")}
-
-    def file_paths_by_lang(self, lang: str) -> list[str]:
-        return [
-            row["path"]
-            for row in self._conn.execute("SELECT path FROM files WHERE lang = ? ORDER BY path", (lang,))
-        ]
 
     # -- symbols and refs ---------------------------------------------------
 
@@ -193,14 +235,6 @@ class Store:
         sql += " ORDER BY length(name), path, lineno LIMIT ?"
         params.append(limit)
         return [dict(row) for row in self._conn.execute(sql, params)]
-
-    def symbols_named(self, name: str) -> list[dict]:
-        return [
-            dict(row)
-            for row in self._conn.execute(
-                "SELECT * FROM symbols WHERE name = ? COLLATE NOCASE ORDER BY path, lineno", (name,)
-            )
-        ]
 
     def references(self, name: str, limit: int | None = 100) -> list[dict]:
         sql = (

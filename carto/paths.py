@@ -30,8 +30,6 @@ class WalkState:
     """Facts the walk learned that the caller needs in its report."""
 
     truncated: bool = False
-    skipped_large: int = 0
-    unreadable: int = 0
 
 
 def resolve_root(path: Union[str, Path]) -> Path:
@@ -102,10 +100,8 @@ def iter_source_files(
             try:
                 size = path.stat().st_size
             except OSError:
-                state.unreadable += 1
                 continue
             if size > max_bytes:
-                state.skipped_large += 1
                 continue
             yield path
             yielded += 1
