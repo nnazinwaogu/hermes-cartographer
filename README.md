@@ -110,11 +110,6 @@ from the captured run.
 Inside a chat session the same facts are four tool calls, and `symbol_rename`
 adds the diff-first apply step.
 
-A 26-second motion piece of the same tour lives in [`video/`](video/):
-[`hermes-cartographer.mp4`](video/hermes-cartographer.mp4) is the rendered
-video, [`video/index.html`](video/index.html) the self-contained Hyperframes
-source.
-
 ## Limits
 
 - **Python is AST-precise.** Symbols, references and rename come from `ast`.
