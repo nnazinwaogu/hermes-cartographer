@@ -49,13 +49,15 @@ class CodeMapTests(unittest.TestCase):
         self.assertIn("not a directory", payload["error"])
 
     def test_malformed_args_is_error_envelope(self):
-        payload = json.loads(tools.code_map(None))
+        with self.assertLogs(tools.logger, level="ERROR"):
+            payload = json.loads(tools.code_map(None))
         self.assertIn("error", payload)
         self.assertIn("hint", payload)
 
     def test_unparsable_budget_is_error_envelope(self):
         payload = json.loads(tools.code_map({"path": FIXTURES / "project_a", "budget": "lots"}))
         self.assertIn("error", payload)
+        self.assertEqual(payload["error"], "budget must be an integer")
 
 
 if __name__ == "__main__":

@@ -8,12 +8,11 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 
 from .carto.errors import CartoError
 from .carto.indexer import open_store
-from .carto.maps import render_map
-from .carto.paths import resolve_root
+from .carto.maps import clamp_budget, render_map
+from .carto.paths import pick_root
 from .carto.query import find_definitions, find_references
 from .carto.rename import apply_rename, plan_rename
 from .carto.settings import Settings
@@ -35,15 +34,20 @@ def _error(message: str, hint: str) -> str:
 
 def _root_and_settings(args: dict, **kwargs):
     settings = _SETTINGS or Settings()
-    raw = args.get("path") or (settings.roots[0] if settings.roots else os.getcwd())
-    return resolve_root(raw), settings
+    return pick_root(settings, args.get("path")), settings
 
 
 def code_map(args: dict, **kwargs) -> str:
     """Return a byte-budgeted symbol outline of the repository at ``args["path"]``."""
     try:
         root, settings = _root_and_settings(args, **kwargs)
-        budget = max(500, min(20000, int(args.get("budget") or settings.default_map_budget)))
+        raw_budget = args.get("budget")
+        if raw_budget not in (None, ""):
+            try:
+                int(raw_budget)
+            except (TypeError, ValueError):
+                return _error("budget must be an integer", "pass budget=<characters>")
+        budget = clamp_budget(raw_budget, settings.default_map_budget)
         store = open_store(root, settings)
         try:
             text, info = render_map(store, root, budget, args.get("subpath"))
@@ -63,6 +67,11 @@ def _limit(value, default: int, high: int = 500) -> int:
     except (TypeError, ValueError):
         return default
     return max(1, min(high, number))
+
+
+def _flag(value) -> bool:
+    """Accept only explicit truthy booleans; a string such as ``"false"`` is false."""
+    return value is True or value == 1 or (isinstance(value, str) and value.strip().lower() == "true")
 
 
 def symbol_find(args: dict, **kwargs) -> str:
@@ -104,7 +113,7 @@ def symbol_refs(args: dict, **kwargs) -> str:
                 store,
                 name,
                 limit=_limit(args.get("limit"), 100),
-                include_attributes=bool(args.get("include_attributes")),
+                include_attributes=_flag(args.get("include_attributes")),
             )
         finally:
             store.close()
@@ -140,7 +149,7 @@ def symbol_rename(args: dict, **kwargs) -> str:
                 settings,
                 old,
                 new,
-                include_attributes=bool(args.get("include_attributes")),
+                include_attributes=_flag(args.get("include_attributes")),
             )
             applied = args.get("dry_run") is False
             if applied:

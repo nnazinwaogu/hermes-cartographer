@@ -46,7 +46,7 @@ def db_path_for(root: Path) -> Path:
     except ImportError as exc:  # pragma: no cover - exercised only outside Hermes
         raise CartoError(
             "Hermes plugin storage is unavailable; run this inside Hermes "
-            "(`hermes carto index <path>`) or pass an explicit index path"
+            "(`hermes carto index <path>`), or pass db_path when using the library"
         ) from exc
     return plugin_data_dir(PLUGIN_NAME) / f"index-{digest}.db"
 
@@ -60,6 +60,27 @@ def _scan_file(lang: str, rel_path: str, text: str) -> FileScan:
     if lang == "python":
         return scan_python(rel_path, text)
     return scan_generic(rel_path, text, lang)
+
+
+def index_file(store: Store, root: Path, rel_path: str, commit: bool = True) -> None:
+    """Read one file, scan it, and replace its rows. Raises on unreadable files."""
+    full_path = Path(root) / rel_path
+    info = full_path.stat()
+    raw = _read_bytes(full_path)
+    text = raw.decode("utf-8", errors="replace")
+    lang = detect_lang(rel_path)
+    scan = _scan_file(lang, rel_path, text)
+    store.replace_file(
+        rel_path,
+        lang,
+        info.st_size,
+        info.st_mtime_ns,
+        hashlib.sha1(raw).hexdigest(),
+        scan.lines,
+        scan.symbols,
+        scan.refs,
+        commit=commit,
+    )
 
 
 def sync(
@@ -94,42 +115,49 @@ def sync(
         store.begin_bulk()
 
     try:
-        for path in iter_source_files(root, settings, state):
-            if deadline is not None and time.monotonic() >= deadline:
-                state.truncated = True
-                break
-            rel_path = rel_posix(root, path)
-            walked.add(rel_path)
-            scanned += 1
-            try:
-                stat = path.stat()
-                if not force and store.file_row(rel_path) == (stat.st_size, stat.st_mtime_ns):
-                    continue
-                raw = _read_bytes(path)
-                text = raw.decode("utf-8", errors="replace")
-                lang = detect_lang(rel_path)
-                scan = _scan_file(lang, rel_path, text)
-                store.replace_file(
-                    rel_path,
-                    lang,
-                    stat.st_size,
-                    stat.st_mtime_ns,
-                    hashlib.sha1(raw).hexdigest(),
-                    scan.lines,
-                    scan.symbols,
-                    scan.refs,
-                    commit=False,
-                )
-                indexed += 1
-                pending += 1
-                if pending >= _BATCH_FILES:
-                    store.commit()
-                    pending = 0
-            except Exception:  # noqa: BLE001 - one bad file must not abort the sync
-                logger.debug("cartographer: skipped %s", rel_path, exc_info=True)
-        store.commit()
-        if bulk:
-            store.end_bulk()
+        try:
+            for path in iter_source_files(root, settings, state):
+                if deadline is not None and time.monotonic() >= deadline:
+                    state.truncated = True
+                    break
+                rel_path = rel_posix(root, path)
+                walked.add(rel_path)
+                scanned += 1
+                try:
+                    info = path.stat()
+                    if not force and store.file_row(rel_path) == (info.st_size, info.st_mtime_ns):
+                        continue
+                    raw = _read_bytes(path)
+                    text = raw.decode("utf-8", errors="replace")
+                    lang = detect_lang(rel_path)
+                    scan = _scan_file(lang, rel_path, text)
+                    store.replace_file(
+                        rel_path,
+                        lang,
+                        info.st_size,
+                        info.st_mtime_ns,
+                        hashlib.sha1(raw).hexdigest(),
+                        scan.lines,
+                        scan.symbols,
+                        scan.refs,
+                        commit=False,
+                    )
+                    indexed += 1
+                    pending += 1
+                    if pending >= _BATCH_FILES:
+                        store.commit()
+                        pending = 0
+                except Exception:  # noqa: BLE001 - one bad file must not abort the sync
+                    logger.debug("cartographer: skipped %s", rel_path, exc_info=True)
+            store.commit()
+        finally:
+            # Ctrl-C, a deadline abort or an unexpected exception must not leave
+            # the name indexes dropped for the rest of this process's life.
+            if bulk:
+                try:
+                    store.end_bulk()
+                except Exception:  # noqa: BLE001 - the index is rebuildable
+                    logger.warning("cartographer: index rebuild failed", exc_info=True)
 
         removed = 0
         if not state.truncated:

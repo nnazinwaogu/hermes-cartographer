@@ -78,10 +78,10 @@ class CommandTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("carto index", out)
 
-    def test_cli_budget_is_forwarded(self):
+    def test_cli_budget_is_clamped(self):
         code, out, _err = self.run_cli("map", str(ROOT), "--budget", "60")
         self.assertEqual(code, 0)
-        self.assertIn("not shown", out)
+        self.assertIn("class Engine", out)
 
     def test_slash_subcommands(self):
         self.assertIn("indexed 7 files", plugin._slash(f"index {ROOT}"))

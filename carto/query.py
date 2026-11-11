@@ -66,6 +66,7 @@ def find_references(
 
     results: list[dict] = []
     seen: set[tuple[str, int, int, str]] = set()
+    truncated = False
 
     def add(path: str, line: int, column: int, kind: str, snippet: str) -> None:
         key = (path, line, column, kind)
@@ -73,12 +74,16 @@ def find_references(
             seen.add(key)
             results.append(_ref_row(path, line, column, kind, snippet))
 
-    for row in store.references(query, limit=None):
-        if row["kind"] == "attr" and not include_attributes:
-            continue
+    # One extra row tells us whether the index alone already overflows the limit,
+    # without loading every reference to a common name such as "self".
+    rows = store.references(
+        query, limit=limit + 1, include_attributes=include_attributes
+    )
+    if len(rows) > limit:
+        truncated = True
+    for row in rows[:limit]:
         add(row["path"], row["lineno"], row["col"], row["kind"], row["snippet"])
 
-    truncated = False
     scanned_files = 0
     if scan_generic and len(query) >= 2:
         pattern = re.compile(r"\b" + re.escape(query) + r"\b")
@@ -88,6 +93,8 @@ def find_references(
         }
         scanned_bytes = 0
         for path, _lang in store.non_python_files():
+            if len(results) >= limit:
+                break
             if scanned_bytes >= max_scan_bytes or scanned_files >= _MAX_SCAN_FILES:
                 truncated = True
                 break
@@ -103,6 +110,11 @@ def find_references(
                     continue
                 for match in pattern.finditer(line):
                     add(path, lineno, match.start(), "name", line.strip()[:160])
+                    if len(results) >= limit:
+                        truncated = True
+                        break
+                if len(results) >= limit:
+                    break
 
     results.sort(key=lambda row: (row["path"], row["line"], row["column"]))
     if len(results) > limit:

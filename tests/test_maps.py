@@ -58,6 +58,12 @@ class MapTests(unittest.TestCase):
         self.assertEqual(int(match["symbols"]), total_symbols - info["symbols"])
         self.assertEqual(int(match["files"]), len({r["path"] for r in self.store.outline_rows()}) - info["files"])
 
+    def test_clamp_budget(self):
+        self.assertEqual(maps.clamp_budget(60, 6000), 500)
+        self.assertEqual(maps.clamp_budget(999999, 6000), 20000)
+        self.assertEqual(maps.clamp_budget(None, 6000), 6000)
+        self.assertEqual(maps.clamp_budget("lots", 6000), 6000)
+
     def test_empty_index_text(self):
         empty_db = Path(self._tmp.name) / "empty.db"
         store = store_module.Store(empty_db, self.root)

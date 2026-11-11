@@ -15,12 +15,13 @@ import hashlib
 import keyword
 import os
 import re
+import stat
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import languages
 from .errors import CartoError
+from .indexer import index_file
 from .settings import Settings
 from .store import Store
 
@@ -37,6 +38,7 @@ class RenamePlan:
     warnings: list[str] = field(default_factory=list)
     edits: dict[str, list[tuple[int, int, int, str]]] = field(default_factory=dict)
     forced_attributes: bool = False
+    digests: dict[str, str] = field(default_factory=dict)
 
 
 def _validate(old: str, new: str, store: Store) -> None:
@@ -87,6 +89,8 @@ def _collect_warnings(path: str, tree: ast.AST, old: str, warnings: list[str]) -
             warnings.append(f"{path}:{node.lineno}: 'except ... as {old}' is not renamed")
         elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name == old:
             warnings.append(f"{path}:{node.lineno}: match pattern name '{old}' is not renamed")
+        elif isinstance(node, ast.keyword) and node.arg == old:
+            warnings.append(f"{path}:{node.lineno}: keyword argument '{old}=' is not renamed")
 
 
 def _collect_edits(
@@ -211,7 +215,8 @@ def plan_rename(
     for path in scan_paths:
         full_path = root / path
         try:
-            text = full_path.read_bytes().decode("utf-8")
+            raw = full_path.read_bytes()
+            text = raw.decode("utf-8")
         except (OSError, UnicodeDecodeError) as exc:
             warnings.append(f"{path}: cannot read as UTF-8 ({exc}); skipped")
             continue
@@ -243,6 +248,7 @@ def plan_rename(
 
         plan.files.append(path)
         plan.edits[path] = ordered
+        plan.digests[path] = hashlib.sha1(raw).hexdigest()
         plan.replacements += len(ordered)
         diffs.append(_unified_diff(path, text, new_text))
 
@@ -253,10 +259,17 @@ def plan_rename(
 
 
 def _atomic_write(path: Path, data: bytes) -> None:
+    """Write *path* via a sibling temp file, keeping its permission bits.
+
+    ``mkstemp`` creates 0600; without the chmod a rename would silently strip
+    group/other read and the executable bit from the replaced source file.
+    """
+    mode = stat.S_IMODE(path.stat().st_mode)
     handle, temp_name = tempfile.mkstemp(dir=str(path.parent), prefix=".carto-", suffix=".tmp")
     try:
         with os.fdopen(handle, "wb") as temp:
             temp.write(data)
+        os.chmod(temp_name, mode)
         os.replace(temp_name, path)
     except BaseException:
         try:
@@ -266,39 +279,35 @@ def _atomic_write(path: Path, data: bytes) -> None:
         raise
 
 
-def _reindex_file(store: Store, root: Path, rel_path: str) -> None:
-    full_path = root / rel_path
-    stat = full_path.stat()
-    raw = full_path.read_bytes()
-    text = raw.decode("utf-8", errors="replace")
-    lang = languages.detect_lang(rel_path)
-    scan = (
-        languages.scan_python(rel_path, text)
-        if lang == "python"
-        else languages.scan_generic(rel_path, text, lang)
-    )
-    store.replace_file(
-        rel_path,
-        lang,
-        stat.st_size,
-        stat.st_mtime_ns,
-        hashlib.sha1(raw).hexdigest(),
-        scan.lines,
-        scan.symbols,
-        scan.refs,
-    )
-
-
 def apply_rename(root: Path, store: Store, plan: RenamePlan, settings: Settings) -> int:
-    """Write the planned files atomically and re-index only those files."""
+    """Write the planned files atomically and re-index only those files.
+
+    Every file is re-read and checked against its plan-time digest before any
+    write, so a plan applied after an external edit aborts with nothing
+    changed instead of splicing stale byte offsets into new text.
+    """
     root = Path(root)
-    written = 0
+    root_resolved = root.resolve()
+    pending: dict[str, tuple[Path, bytes]] = {}
+
     for path in plan.files:
         full_path = root / path
-        text = full_path.read_bytes().decode("utf-8")
+        if not full_path.resolve().is_relative_to(root_resolved):
+            raise CartoError(f"{path} resolves outside {root}; rename refused")
+        try:
+            raw = full_path.read_bytes()
+        except OSError as exc:
+            raise CartoError(f"cannot read {path}: {exc}") from exc
+        expected = plan.digests.get(path)
+        if expected is not None and hashlib.sha1(raw).hexdigest() != expected:
+            raise CartoError(f"{path} changed since the rename was planned; nothing written")
+        pending[path] = (full_path, raw)
+
+    for path, (full_path, raw) in pending.items():
+        text = raw.decode("utf-8")
         new_text = _apply_edits_to_text(text, plan.edits[path])
         ast.parse(new_text)
         _atomic_write(full_path, new_text.encode("utf-8"))
-        _reindex_file(store, root, path)
-        written += 1
-    return written
+        index_file(store, root, path)
+
+    return len(pending)

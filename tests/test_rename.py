@@ -103,6 +103,33 @@ class RenameTests(unittest.TestCase):
         self.assertEqual(plan.files, ["helpers.py"])
         self.assertEqual((self.root / "aliases.py").read_text(encoding="utf-8"), before)
 
+    def test_apply_refuses_stale_plan(self):
+        original = (self.root / "helpers.py").read_text(encoding="utf-8")
+        plan = self.plan("describe", "summarize")
+        (self.root / "helpers.py").write_text("# edited externally\n" + original, encoding="utf-8")
+
+        with self.assertRaisesRegex(errors.CartoError, "changed since the rename was planned"):
+            rename.apply_rename(self.root, self.store, plan, Settings())
+
+        text = (self.root / "helpers.py").read_text(encoding="utf-8")
+        self.assertIn("# edited externally", text)
+        self.assertIn("def describe(engine):", text)
+
+    def test_warns_on_keyword_argument(self):
+        (self.root / "caller.py").write_text(
+            "def target(x):\n    return x\n\n\ndef call():\n    return helper(target=1)\n",
+            encoding="utf-8",
+        )
+        indexer.sync(self.root, Settings(), db_path=self.db)
+
+        plan = self.plan("target", "renamed")
+
+        self.assertTrue(
+            any("keyword argument 'target='" in warning for warning in plan.warnings),
+            plan.warnings,
+        )
+        self.assertEqual(plan.files, ["caller.py"])
+
     def test_method_attributes_forced(self):
         plan = self.plan("run", "execute")
 

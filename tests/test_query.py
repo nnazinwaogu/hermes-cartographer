@@ -80,6 +80,11 @@ class QueryTests(unittest.TestCase):
             [("usecore.py", 8, 18, "attr")],
         )
 
+    def test_refs_limit_truncates(self):
+        refs, meta = query.find_references(self.store, "self", limit=2)
+        self.assertEqual(len(refs), 2)
+        self.assertTrue(meta["truncated"])
+
     def test_refs_undefined_name_findable(self):
         refs, meta = query.find_references(self.store, "json")
         self.assertEqual(
@@ -166,6 +171,13 @@ class SymbolRefsToolTests(unittest.TestCase):
         payload = json.loads(tools.symbol_refs({"path": FIXTURES / "project_a"}))
         self.assertIn("error", payload)
         self.assertIn("hint", payload)
+
+    def test_string_false_flag_excludes_attributes(self):
+        path = {"path": FIXTURES / "project_a", "name": "run"}
+        without = json.loads(tools.symbol_refs({**path, "include_attributes": "false"}))
+        with_attrs = json.loads(tools.symbol_refs({**path, "include_attributes": "true"}))
+        self.assertEqual(without["count"], 0)
+        self.assertEqual(with_attrs["count"], 1)
 
 
 if __name__ == "__main__":

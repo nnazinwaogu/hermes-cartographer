@@ -71,6 +71,22 @@ def detect_root(start: Path) -> Path:
     return start
 
 
+def pick_root(settings: Settings, explicit: Union[str, Path, None] = None) -> Path:
+    """Resolve *explicit*, else the first configured root that exists, else the cwd.
+
+    Skipping stale configured roots is deliberate: a moved checkout should not
+    turn every tool call into "not a directory".
+    """
+    if explicit:
+        return resolve_root(explicit)
+    for candidate in settings.roots:
+        try:
+            return resolve_root(candidate)
+        except CartoError:
+            continue
+    return resolve_root(Path.cwd())
+
+
 def iter_source_files(
     root: Path, settings: Settings, state: WalkState | None = None
 ) -> Iterator[Path]:

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from . import schemas, tools
 from .carto.errors import CartoError
-from .carto.paths import detect_root, resolve_root
+from .carto.paths import detect_root, pick_root, resolve_root
 from .carto.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ def _inject_map(
             return None
 
         from .carto.indexer import open_store
-        from .carto.maps import render_map
+        from .carto.maps import clamp_budget, render_map
 
         store = open_store(root, settings, time_budget_ms=settings.hook_index_ms)
         try:
@@ -80,8 +80,11 @@ def _inject_map(
         )
         context = header + text
         if len(context) > settings.map_budget:
-            cut = context.rfind("\n", 0, settings.map_budget)
-            context = context[: cut if cut > 0 else settings.map_budget] + "\n…"
+            # Keep the ellipsis inside the budget too: a callback payload that
+            # overflows trips the spill path and costs the model a file read.
+            limit = max(1, settings.map_budget - 2)
+            cut = context.rfind("\n", 0, limit)
+            context = context[: cut if cut > 0 else limit] + "\n…"
         return {"context": context}
     except Exception:  # noqa: BLE001 - a broken hook must never break a turn
         logger.debug("cartographer: map injection skipped", exc_info=True)
@@ -99,12 +102,7 @@ _HELP_TEXT = """carto — code intelligence
 
 
 def _default_root(settings: Settings) -> Path:
-    for candidate in settings.roots:
-        try:
-            return resolve_root(candidate)
-        except CartoError:
-            continue
-    return resolve_root(Path.cwd())
+    return pick_root(settings)
 
 
 def _format_index(report) -> str:
@@ -171,7 +169,7 @@ def _format_references(store, name: str, attrs: bool) -> str:
 def _run(command: str, settings: Settings, root=None, name=None, budget=None, attrs=False) -> str:
     """One implementation of every subcommand; the slash and CLI surfaces only parse into it."""
     from .carto.indexer import open_store, stats, sync
-    from .carto.maps import render_map
+    from .carto.maps import clamp_budget, render_map
 
     root_path = resolve_root(root or _default_root(settings))
     if command == "index":
@@ -187,7 +185,7 @@ def _run(command: str, settings: Settings, root=None, name=None, budget=None, at
     try:
         if command == "map":
             text, _info = render_map(
-                store, root_path, max(200, int(budget or settings.default_map_budget))
+                store, root_path, clamp_budget(budget, settings.default_map_budget)
             )
             return text.rstrip("\n")
         if command == "find":

@@ -9,6 +9,15 @@ from .store import Store
 _INDENT = "  "
 
 
+def clamp_budget(value, default: int, low: int = 500, high: int = 20000) -> int:
+    """Coerce a caller-supplied budget; unusable values fall back to *default*."""
+    try:
+        number = int(value) if value not in (None, "") else int(default)
+    except (TypeError, ValueError):
+        number = int(default)
+    return max(low, min(high, number))
+
+
 def _symbol_line(row: dict) -> str:
     name = row["name"]
     if row["kind"] == "class":

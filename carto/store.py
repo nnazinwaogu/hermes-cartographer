@@ -105,10 +105,12 @@ class Store:
     # -- meta ---------------------------------------------------------------
 
     def meta_get(self, key: str, default: str | None = None) -> str | None:
+        """Return one ``meta`` value, or *default*."""
         row = self._conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
         return row["value"] if row else default
 
     def meta_set(self, key: str, value: object) -> None:
+        """Upsert one ``meta`` value as text."""
         with self._conn:
             self._conn.execute(
                 "INSERT INTO meta(key, value) VALUES (?, ?) "
@@ -119,6 +121,7 @@ class Store:
     # -- files --------------------------------------------------------------
 
     def file_row(self, path: str) -> tuple[int, int] | None:
+        """Return ``(size, mtime_ns)`` for an indexed file, or None."""
         row = self._conn.execute(
             "SELECT size, mtime_ns FROM files WHERE path = ?", (path,)
         ).fetchone()
@@ -192,12 +195,14 @@ class Store:
         self._conn.commit()
 
     def delete_file(self, path: str) -> None:
+        """Remove a file and every symbol/reference row that belongs to it."""
         with self._conn:
             self._conn.execute("DELETE FROM symbols WHERE path = ?", (path,))
             self._conn.execute("DELETE FROM refs WHERE path = ?", (path,))
             self._conn.execute("DELETE FROM files WHERE path = ?", (path,))
 
     def all_paths(self) -> set[str]:
+        """Every indexed path, for deletion detection."""
         return {row["path"] for row in self._conn.execute("SELECT path FROM files")}
 
     # -- symbols and refs ---------------------------------------------------
@@ -210,6 +215,7 @@ class Store:
         kind: str | None = None,
         mode: str = "exact",
     ) -> list[dict]:
+        """Definitions matching *name* by exact, prefix or fuzzy mode."""
         clauses: list[str] = []
         params: list[object] = []
         if kind:
@@ -236,18 +242,22 @@ class Store:
         params.append(limit)
         return [dict(row) for row in self._conn.execute(sql, params)]
 
-    def references(self, name: str, limit: int | None = 100) -> list[dict]:
-        sql = (
-            "SELECT * FROM refs WHERE name = ? COLLATE NOCASE "
-            "ORDER BY path, lineno, col"
-        )
+    def references(
+        self, name: str, limit: int | None = 100, include_attributes: bool = True
+    ) -> list[dict]:
+        """References to *name*, optionally excluding attribute accesses."""
+        sql = "SELECT * FROM refs WHERE name = ? COLLATE NOCASE"
         params: list[object] = [name]
+        if not include_attributes:
+            sql += " AND kind != 'attr'"
+        sql += " ORDER BY path, lineno, col"
         if limit is not None:
             sql += " LIMIT ?"
             params.append(limit)
         return [dict(row) for row in self._conn.execute(sql, params)]
 
     def non_python_files(self) -> list[tuple[str, str]]:
+        """``(path, lang)`` for indexed non-Python files, ordered by path."""
         return [
             (row["path"], row["lang"])
             for row in self._conn.execute(
@@ -256,12 +266,14 @@ class Store:
         ]
 
     def has_symbol(self, name: str) -> bool:
+        """Case-insensitive check that a definition of *name* exists."""
         row = self._conn.execute(
             "SELECT 1 FROM symbols WHERE name = ? COLLATE NOCASE LIMIT 1", (name,)
         ).fetchone()
         return row is not None
 
     def python_definition_paths(self, name: str) -> list[str]:
+        """Distinct ``.py`` files defining *name*."""
         return [
             row["path"]
             for row in self._conn.execute(
@@ -272,6 +284,7 @@ class Store:
         ]
 
     def python_files(self) -> list[str]:
+        """Every indexed Python file, ordered by path."""
         return [
             row["path"]
             for row in self._conn.execute(
@@ -280,6 +293,7 @@ class Store:
         ]
 
     def outline_rows(self, subpath: str | None = None) -> list[dict]:
+        """Symbols joined with their file's line count, ordered for rendering."""
         sql = (
             "SELECT s.path, s.name, s.qualname, s.kind, s.lineno, s.end_lineno, s.signature, "
             "s.parent, f.lines AS file_lines, f.symbol_count "
@@ -294,6 +308,7 @@ class Store:
         return [dict(row) for row in self._conn.execute(sql, params)]
 
     def symbols_for_path(self, path: str) -> list[dict]:
+        """All symbols of one file, in source order."""
         return [
             dict(row)
             for row in self._conn.execute(
@@ -302,18 +317,21 @@ class Store:
         ]
 
     def counts(self) -> dict:
+        """Row counts for files, symbols and refs."""
         def count(table: str) -> int:
             return int(self._conn.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()["n"])
 
         return {"files": count("files"), "symbols": count("symbols"), "refs": count("refs")}
 
     def files_by_lang(self) -> dict[str, int]:
+        """File count per language."""
         return {
             row["lang"]: row["n"]
             for row in self._conn.execute("SELECT lang, COUNT(*) AS n FROM files GROUP BY lang")
         }
 
     def symbol_kinds(self) -> dict[str, int]:
+        """Symbol count per kind."""
         return {
             row["kind"]: row["n"]
             for row in self._conn.execute("SELECT kind, COUNT(*) AS n FROM symbols GROUP BY kind")

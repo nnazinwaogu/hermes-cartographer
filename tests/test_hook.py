@@ -90,6 +90,10 @@ class HookTests(unittest.TestCase):
         context = self.hook(self.settings(map_budget=600))
         self.assertLessEqual(len(context["context"]), 600)
 
+    def test_payload_stays_inside_tiny_budget(self):
+        context = self.hook(self.settings(map_budget=200))
+        self.assertLessEqual(len(context["context"]), 200)
+
     def test_fresh_root_budget_gives_hint(self):
         with mock.patch.object(indexer, "sync", return_value=None):
             context = self.hook(self.settings())

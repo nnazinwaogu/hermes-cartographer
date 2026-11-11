@@ -15,7 +15,8 @@ hermes plugins install hermes-cartographer
 hermes plugins enable hermes-cartographer
 ```
 
-Before then, from a clone:
+Before then, from a clone (Windows shown; on macOS/Linux the user plugin
+directory is `~/.hermes/plugins`, or `$HERMES_HOME/plugins`):
 
 ```powershell
 git clone https://github.com/nnazinwaogu/hermes-cartographer
@@ -23,8 +24,10 @@ Copy-Item -Recurse .\hermes-cartographer "$env:LOCALAPPDATA\hermes\plugins\herme
 hermes plugins enable hermes-cartographer
 ```
 
-Start a session inside any repository. The first turn already carries a repo
-map; no tool call is needed to see what is there.
+Start a session inside a repository. With `inject: first` (the default) the
+first turn carries whatever the 500 ms indexing budget could map — a partial
+map on a cold tree, a one-line hint when nothing was indexed yet. Later turns
+refresh incrementally.
 
 ## Tools
 
@@ -70,7 +73,7 @@ explicit step apart in `symbol_rename`.
 
 ```
 # 1  index a real source tree
-$ hermes carto index C:\Users\nnazm\AppData\Local\hermes\hermes-agent\tools
+$ hermes carto index ...\hermes-agent\tools
 indexed 378 files · 9,219 symbols · 138,317 refs · 10,456 ms
 
 # 2  ask the agent instead of grepping
@@ -78,14 +81,14 @@ $ hermes chat --in ...\tests\fixtures\project_a -q "Use symbol_find to locate cl
 core.py:6
 
 # 3  locate a definition without grep
-$ hermes carto find dispatch C:\Users\nnazm\AppData\Local\hermes\hermes-agent\tools
+$ hermes carto find dispatch ...\hermes-agent\tools
 async_delegation_worker.py:43  method WorkerDelegationLedger.dispatch(self, record)
 browser_use_cli.py:837  method browser_exec.dispatch()
 code_kernel.py:224  method CellAuthority.dispatch(self, tool_name: str, tool_args: dict)
 registry.py:1069  method ToolRegistry.dispatch(self, name: str, args: dict, *, scope: Optional[str]=None, **kwargs)
 
 # 4  references before an edit
-$ hermes carto refs dispatch C:\Users\nnazm\AppData\Local\hermes\hermes-agent\tools
+$ hermes carto refs dispatch ...\hermes-agent\tools
 browser_use_cli.py:861:63  dispatched = run_fenced({"features": {"local": True}}, dispatch)
 browser_use_cli.py:863:21  dispatched = dispatch()
 code_execution_rpc.py:106:21  result = dispatch(tool_name, tool_args)
@@ -93,9 +96,9 @@ code_execution_rpc.py:106:21  result = dispatch(tool_name, tool_args)
 (scanned 1 non-Python files)
 
 # 5  what the index holds
-$ hermes carto stats C:\Users\nnazm\AppData\Local\hermes\hermes-agent\tools
-root: C:\Users\nnazm\AppData\Local\hermes\hermes-agent\tools
-index: C:\Users\nnazm\AppData\Local\hermes\plugin-data\hermes-cartographer\index-58cccc113d7c.db (23100.0 KB)
+$ hermes carto stats ...\hermes-agent\tools
+root: ...\hermes-agent\tools
+index: ...\plugin-data\hermes-cartographer\index-58cccc113d7c.db (23100.0 KB)
 files: 378  symbols: 9219  refs: 138317
 languages: other 1, python 377
 kinds: class 368, constant 2129, function 4903, method 1819
@@ -105,6 +108,11 @@ last index: 2026-11-11T04:17:54+00:00 (10456 ms)
 Inside a chat session the same facts are four tool calls, and `symbol_rename`
 adds the diff-first apply step.
 
+A 26-second motion piece of the same tour lives in [`video/`](video/):
+[`hermes-cartographer.mp4`](video/hermes-cartographer.mp4) is the rendered
+video, [`video/index.html`](video/index.html) the self-contained Hyperframes
+source.
+
 ## Limits
 
 - **Python is AST-precise.** Symbols, references and rename come from `ast`.
@@ -112,16 +120,24 @@ adds the diff-first apply step.
   Java, C/C++/C# get a line-based regex scan; `symbol_refs` for them is a
   whole-word on-disk scan (20 MB cap), and rename is refused.
 - **No type inference, no call graph.** `symbol_refs` is name-based.
-- **Rename scope.** Import aliases, `global`/`nonlocal`, `except ... as` and
-  match-pattern names produce warnings rather than edits; keyword arguments
-  (`f(old=1)`) are not rewritten. Methods always rewrite `obj.old(...)` call
-  sites; other attributes need `include_attributes=true`.
+- **Rename scope.** Import aliases, `global`/`nonlocal`, `except ... as`,
+  match-pattern names and keyword arguments (`f(old=1)`) produce warnings
+  rather than edits. Methods always rewrite `obj.old(...)` call sites; other
+  attributes need `include_attributes=true`.
 - **Index caps.** Excluded directories, a 512 KB per-file cap and a 20,000
   file cap apply. A file that does not parse contributes no symbols and does
   not abort the sync.
 - **Incremental by `(size, mtime_ns)`.** Unchanged files are never re-read;
   each tool call re-stats the tree. A build that preserves both size and
   mtime is not noticed until the file changes or the index is rebuilt.
+- **Where the index lives.** One SQLite file per root under
+  `plugin-data/hermes-cartographer/`; its size tracks the reference count
+  (23 MB for 378 files, hundreds of MB for a very large tree). Delete the
+  file to reclaim the space; the next call rebuilds it.
+- **The hook maps the session's working directory** when `roots` is empty.
+  Start Hermes inside the repo you mean to map, or set `roots`. Starting it
+  in a large non-repository directory makes the first tool call index that
+  whole directory.
 
 ## Privacy and disclosure
 
@@ -149,6 +165,9 @@ $ hermes plugins validate . --install-deps
 ✓ built-in tool collisions — no collisions
 ✓ security scan — safe
 ✓ no core override — no runtime rebinds of Hermes core
+◆ Isolation — runs in the plugin host (plugins.isolation: host)
+  · ctx.register_cli_command() is skipped in the host (`hermes <command>` 
+subcommands are wired into the local CLI parser)
 
 Validation passed.
 
