@@ -1,7 +1,7 @@
 name: hermes-cartographer
 version: "1.0.0"
 repo: https://github.com/nnazinwaogu/hermes-cartographer
-sha: fe8be1f51b58fd81d076b36d2c60db17c956182c
+sha: f8b6739af2aaa2f0da2c7c392e9d69e404deedee
 description: "Code intelligence for Hermes Agent: a token-budgeted repo map, symbol definitions and references, deterministic first-turn context injection, and AST-safe cross-file rename for Python, backed by an incremental SQLite index. Four tools (code_map, symbol_find, symbol_refs, symbol_rename), one pre_llm_call hook, and /carto plus `hermes carto` subcommands. Disclosure: reads source files under the roots you configure and writes only its own index under plugin-data/hermes-cartographer/. No network, no model calls, no shell, no third-party dependencies."
 maintainer: nnazinwaogu
 tier: community
