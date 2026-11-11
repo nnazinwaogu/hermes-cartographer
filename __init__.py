@@ -36,3 +36,10 @@ def register(ctx) -> None:
         handler=tools.code_map,
         description="Token-budgeted repo symbol outline",
     )
+    ctx.register_tool(
+        name="symbol_find",
+        toolset="cartographer",
+        schema=schemas.SYMBOL_FIND,
+        handler=tools.symbol_find,
+        description="Find symbol definitions",
+    )

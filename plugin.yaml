@@ -9,6 +9,7 @@ kind: standalone
 requires_hermes: ">=0.23.0"
 provides_tools:
   - code_map
+  - symbol_find
 tags:
   - code-intelligence
   - navigation

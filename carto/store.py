@@ -56,6 +56,11 @@ _SYMBOL_COLUMNS = ("path", "name", "qualname", "kind", "lineno", "end_lineno", "
 _REF_COLUMNS = ("path", "name", "lineno", "col", "kind", "snippet")
 
 
+def _escape_like(value: str) -> str:
+    """Escape LIKE metacharacters so ``_work`` matches only itself."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 class Store:
     """One SQLite index for one repository root."""
 
@@ -155,12 +160,36 @@ class Store:
 
     # -- symbols and refs ---------------------------------------------------
 
-    def definitions(self, name: str, limit: int = 50, like: str | None = None) -> list[dict]:
-        sql = "SELECT * FROM symbols"
+    def definitions(
+        self,
+        name: str,
+        limit: int = 50,
+        like: str | None = None,
+        kind: str | None = None,
+        mode: str = "exact",
+    ) -> list[dict]:
+        clauses: list[str] = []
         params: list[object] = []
+        if kind:
+            clauses.append("kind = ?")
+            params.append(kind)
         if like is not None:
-            sql += " WHERE name LIKE ? COLLATE NOCASE"
+            clauses.append("name LIKE ? COLLATE NOCASE")
             params.append(like)
+        elif mode == "exact":
+            clauses.append("name = ? COLLATE NOCASE")
+            params.append(name)
+        elif mode == "prefix":
+            clauses.append("name LIKE ? ESCAPE '\\' COLLATE NOCASE")
+            params.append(_escape_like(name) + "%")
+        elif mode == "fuzzy":
+            clauses.append("name LIKE ? ESCAPE '\\' COLLATE NOCASE")
+            params.append("%" + _escape_like(name) + "%")
+        else:
+            raise ValueError(f"unknown mode: {mode}")
+        sql = "SELECT * FROM symbols"
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
         sql += " ORDER BY length(name), path, lineno LIMIT ?"
         params.append(limit)
         return [dict(row) for row in self._conn.execute(sql, params)]
