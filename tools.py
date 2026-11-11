@@ -11,6 +11,8 @@ import logging
 import os
 
 from .carto.errors import CartoError
+from .carto.indexer import open_store
+from .carto.maps import render_map
 from .carto.paths import resolve_root
 from .carto.settings import Settings
 
@@ -38,11 +40,14 @@ def _root_and_settings(args: dict, **kwargs):
 def code_map(args: dict, **kwargs) -> str:
     """Return a byte-budgeted symbol outline of the repository at ``args["path"]``."""
     try:
-        root, _settings = _root_and_settings(args, **kwargs)
-        text = f"(no symbols indexed for {root} — run `hermes carto index`)\n"
-        return json.dumps(
-            {"root": str(root), "text": text, "files": 0, "symbols": 0, "truncated": False}
-        )
+        root, settings = _root_and_settings(args, **kwargs)
+        budget = max(500, min(20000, int(args.get("budget") or settings.default_map_budget)))
+        store = open_store(root, settings)
+        try:
+            text, info = render_map(store, root, budget, args.get("subpath"))
+        finally:
+            store.close()
+        return json.dumps({"root": str(root), "text": text, **info})
     except CartoError as exc:
         return _error(str(exc), "pass path=<existing directory> or set the plugin roots config")
     except Exception as exc:  # noqa: BLE001 - a handler must never raise

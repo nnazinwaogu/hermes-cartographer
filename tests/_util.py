@@ -27,6 +27,15 @@ def load_plugin():
     return module
 
 
+def load_submodule(name: str):
+    """Import ``<plugin>.<name>``, e.g. ``carto.languages``."""
+    load_plugin()
+    return importlib.import_module(f"{PLUGIN_MODULE_NAME}.{name}")
+
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+
+
 def _scalar(text: str):
     """Parse the scalar forms our manifest uses."""
     if len(text) >= 2 and text[0] == text[-1] == '"':
