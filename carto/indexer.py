@@ -190,3 +190,42 @@ def open_store(
     store = Store(db, root)
     store.sync_schema()
     return store
+
+
+def stats(root: Path, settings: Settings) -> dict:
+    """Report what the index holds without refreshing it."""
+    root = resolve_root(root)
+    db = db_path_for(root)
+    data = {
+        "root": str(root),
+        "db": str(db),
+        "indexed": db.exists(),
+        "files": 0,
+        "symbols": 0,
+        "refs": 0,
+        "languages": {},
+        "kinds": {},
+        "last_index_at": None,
+        "last_index_ms": None,
+        "db_bytes": 0,
+    }
+    if not data["indexed"]:
+        return data
+
+    store = Store(db, root)
+    store.sync_schema()
+    try:
+        counts = store.counts()
+        return {
+            **data,
+            "files": counts["files"],
+            "symbols": counts["symbols"],
+            "refs": counts["refs"],
+            "languages": store.files_by_lang(),
+            "kinds": store.symbol_kinds(),
+            "last_index_at": store.meta_get("last_index_at"),
+            "last_index_ms": store.meta_get("last_index_ms"),
+            "db_bytes": db.stat().st_size,
+        }
+    finally:
+        store.close()

@@ -26,6 +26,7 @@ class StubContext:
         self.tools: list[str] = []
         self.hooks: list[str] = []
         self.skills: list[tuple] = []
+        self.commands: list[str] = []
 
     def register_tool(self, name, *args, **kwargs):
         self.tools.append(str(name))
@@ -35,6 +36,12 @@ class StubContext:
 
     def register_skill(self, name, path, *args, **kwargs):
         self.skills.append((str(name), Path(path)))
+
+    def register_command(self, name, *args, **kwargs):
+        self.commands.append(str(name))
+
+    def register_cli_command(self, name, *args, **kwargs):
+        self.commands.append(str(name))
 
     def get_config(self, key, default=None):
         return default
