@@ -15,6 +15,7 @@ from .carto.indexer import open_store
 from .carto.maps import render_map
 from .carto.paths import resolve_root
 from .carto.query import find_definitions, find_references
+from .carto.rename import apply_rename, plan_rename
 from .carto.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -121,3 +122,46 @@ def symbol_refs(args: dict, **kwargs) -> str:
     except Exception as exc:  # noqa: BLE001 - a handler must never raise
         logger.exception("symbol_refs failed")
         return _error(f"symbol_refs failed: {exc}", "check the arguments and try again")
+
+
+def symbol_rename(args: dict, **kwargs) -> str:
+    """Rename a Python symbol across the repo; dry run unless ``dry_run`` is false."""
+    try:
+        old = str(args.get("old") or "").strip()
+        new = str(args.get("new") or "").strip()
+        if not old or not new:
+            return _error("old and new are required", "pass old=<current name> new=<new name>")
+        root, settings = _root_and_settings(args, **kwargs)
+        store = open_store(root, settings)
+        try:
+            plan = plan_rename(
+                root,
+                store,
+                settings,
+                old,
+                new,
+                include_attributes=bool(args.get("include_attributes")),
+            )
+            applied = args.get("dry_run") is False
+            if applied:
+                apply_rename(root, store, plan, settings)
+        finally:
+            store.close()
+        return json.dumps(
+            {
+                "old": old,
+                "new": new,
+                "dry_run": not applied,
+                "applied": applied,
+                "files_changed": len(plan.files),
+                "replacements": plan.replacements,
+                "diff": plan.diff,
+                "warnings": plan.warnings,
+                "forced_attributes": plan.forced_attributes,
+            }
+        )
+    except CartoError as exc:
+        return _error(str(exc), "rename supports Python only; dry_run defaults to true")
+    except Exception as exc:  # noqa: BLE001 - a handler must never raise
+        logger.exception("symbol_rename failed")
+        return _error(f"symbol_rename failed: {exc}", "check the arguments and try again")

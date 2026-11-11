@@ -50,3 +50,10 @@ def register(ctx) -> None:
         handler=tools.symbol_refs,
         description="Find symbol references",
     )
+    ctx.register_tool(
+        name="symbol_rename",
+        toolset="cartographer",
+        schema=schemas.SYMBOL_RENAME,
+        handler=tools.symbol_rename,
+        description="AST-safe Python rename",
+    )

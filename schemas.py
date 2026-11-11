@@ -75,3 +75,31 @@ SYMBOL_REFS = {
     "additionalProperties": False,
     "required": ["name"],
 }
+
+SYMBOL_RENAME = {
+    "type": "object",
+    "properties": {
+        "old": {
+            "type": "string",
+            "description": "Existing Python symbol name to rename.",
+        },
+        "new": {
+            "type": "string",
+            "description": "Replacement identifier. Must not be a keyword, builtin or existing symbol.",
+        },
+        "path": {
+            "type": "string",
+            "description": "Repository root to operate on. Defaults to the current workspace.",
+        },
+        "dry_run": {
+            "type": "boolean",
+            "description": "Return the diff without writing. Defaults to true; set false to apply.",
+        },
+        "include_attributes": {
+            "type": "boolean",
+            "description": "Also rename attribute accesses to non-method symbols. Method call sites are always edited.",
+        },
+    },
+    "additionalProperties": False,
+    "required": ["old", "new"],
+}

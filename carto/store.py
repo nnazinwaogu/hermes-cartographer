@@ -227,6 +227,24 @@ class Store:
         ).fetchone()
         return row is not None
 
+    def python_definition_paths(self, name: str) -> list[str]:
+        return [
+            row["path"]
+            for row in self._conn.execute(
+                "SELECT DISTINCT path FROM symbols "
+                "WHERE name = ? COLLATE NOCASE AND path LIKE '%.py' ORDER BY path",
+                (name,),
+            )
+        ]
+
+    def python_files(self) -> list[str]:
+        return [
+            row["path"]
+            for row in self._conn.execute(
+                "SELECT path FROM files WHERE lang = 'python' ORDER BY path"
+            )
+        ]
+
     def outline_rows(self, subpath: str | None = None) -> list[dict]:
         sql = (
             "SELECT s.path, s.name, s.qualname, s.kind, s.lineno, s.end_lineno, s.signature, "
