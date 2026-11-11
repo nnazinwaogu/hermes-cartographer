@@ -8,6 +8,16 @@ calls, no shell, no third-party dependencies.
 
 Requires Hermes Agent 0.23.0 or newer. Standard library only (Python 3.10+).
 
+## Screenshots
+
+| | |
+| --- | --- |
+| ![Cover: hermes-cartographer](docs/screenshots/01-cover.png)<br>*Your agent stops reading whole files and starts asking the repository where things are.* | ![The cost of whole-file reads](docs/screenshots/02-cost.png)<br>*One definition among four definitions and sixteen references; the index tells them apart.* |
+| ![Four tools on one index](docs/screenshots/03-mechanism.png)<br>*Four tools on one index: `code_map`, `symbol_find`, `symbol_refs`, `symbol_rename`.* | ![The repository map](docs/screenshots/04-map.png)<br>*The repository at a glance: symbols, file by file, inside a character budget.* |
+| ![Turn one starts with the map](docs/screenshots/05-turn-one.png)<br>*Turn one starts with the map; `pre_llm_call` injects it before the model asks.* | ![Dry-run rename diff](docs/screenshots/06-rename.png)<br>*`symbol_rename` shows the diff before it writes.* |
+| ![Measured evidence](docs/screenshots/07-evidence.png)<br>*Measured on the Hermes `tools/` subtree: 378 files, 9,219 symbols, 138,317 references.* | ![Limits](docs/screenshots/08-limits.png)<br>*What it refuses to pretend: Python-precise, definitions-only elsewhere, no type inference.* |
+| ![Install](docs/screenshots/09-install.png)<br>*Install, enable, index, find. No network, no model calls, no shell.* | |
+
 ## Install
 
 After the catalog entry merges:
