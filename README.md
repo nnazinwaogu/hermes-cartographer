@@ -1,10 +1,12 @@
 # hermes-cartographer
 
 Code intelligence for [Hermes Agent](https://github.com/NousResearch/hermes-agent):
-a token-budgeted repo map, symbol definitions and references, deterministic
+a token-budgeted repo map, symbol definitions and references,
 first-turn context injection, and AST-safe cross-file rename for Python —
 backed by an incremental SQLite index. No embeddings, no network, no model
 calls, no shell, no third-party dependencies.
+
+Requires Hermes Agent 0.23.0 or newer. Standard library only (Python 3.10+).
 
 ## Install
 
@@ -26,8 +28,8 @@ hermes plugins enable hermes-cartographer
 
 Start a session inside a repository. With `inject: first` (the default) the
 first turn carries whatever the 500 ms indexing budget could map — a partial
-map on a cold tree, a one-line hint when nothing was indexed yet. Later turns
-refresh incrementally.
+map on a cold tree, a one-line hint when nothing was indexed yet.
+Later tool calls refresh it incrementally.
 
 ## Tools
 
@@ -35,8 +37,8 @@ refresh incrementally.
 | --- | --- | --- |
 | `code_map` | `path?`, `budget?`, `subpath?` | First contact with a repo. Replaces reading whole files to learn the layout. |
 | `symbol_find` | `name`, `kind?`, `mode?`, `path?`, `limit?` | You know a name and want its `file:line`, kind and signature instead of grepping. |
-| `symbol_refs` | `name`, `include_attributes?`, `limit?`, `path?` | Before editing: every call site, AST-precise for Python. |
-| `symbol_rename` | `old`, `new`, `dry_run?`, `include_attributes?` | A Python rename that must not touch strings, comments or unrelated names. |
+| `symbol_refs` | `name`, `include_attributes?`, `limit?`, `path?` | Before editing: every reference, AST-precise for Python. |
+| `symbol_rename` | `old`, `new`, `dry_run?`, `include_attributes?`, `path?` | A Python rename that must not touch strings, comments or unrelated names. |
 
 Every tool returns JSON. A failure is `{"error": "...", "hint": "..."}`; no
 handler ever raises into the agent loop.
@@ -69,27 +71,29 @@ explicit step apart in `symbol_rename`.
 | `max_files` | int | `20000` | Stop indexing after this many files. |
 | `excludes` | list | `[]` | Extra directory names to skip, on top of the built-in list. |
 
-## The 90-second tour
+## The tour
 
-```
+From the plugin repo root, with an example checkout of Hermes:
+
+```powershell
 # 1  index a real source tree (PowerShell)
-$repo = "$env:LOCALAPPDATA\hermes\hermes-agent\tools"
-hermes carto index $repo
+PS> $repo = "$env:LOCALAPPDATA\hermes\hermes-agent\tools"
+PS> hermes carto index $repo
 indexed 378 files · 9,219 symbols · 138,317 refs · 10,456 ms
 
 # 2  ask the agent instead of grepping
-hermes chat --in .\tests\fixtures\project_a -q "Use symbol_find to locate class Engine. Reply with file:line only." --oneshot
+PS> hermes chat --in .\tests\fixtures\project_a -q "Use symbol_find to locate class Engine. Reply with file:line only." --oneshot
 core.py:6
 
 # 3  locate a definition without grep
-hermes carto find dispatch $repo
+PS> hermes carto find dispatch $repo
 async_delegation_worker.py:43  method WorkerDelegationLedger.dispatch(self, record)
 browser_use_cli.py:837  method browser_exec.dispatch()
 code_kernel.py:224  method CellAuthority.dispatch(self, tool_name: str, tool_args: dict)
 registry.py:1069  method ToolRegistry.dispatch(self, name: str, args: dict, *, scope: Optional[str]=None, **kwargs)
 
 # 4  references before an edit
-hermes carto refs dispatch $repo
+PS> hermes carto refs dispatch $repo
 browser_use_cli.py:861:63  dispatched = run_fenced({"features": {"local": True}}, dispatch)
 browser_use_cli.py:863:21  dispatched = dispatch()
 code_execution_rpc.py:106:21  result = dispatch(tool_name, tool_args)
@@ -97,7 +101,7 @@ code_execution_rpc.py:106:21  result = dispatch(tool_name, tool_args)
 (scanned 1 non-Python files)
 
 # 5  what the index holds
-hermes carto stats $repo
+PS> hermes carto stats $repo
 files: 378  symbols: 9219  refs: 138317
 languages: other 1, python 377
 kinds: class 368, constant 2129, function 4903, method 1819
@@ -107,15 +111,15 @@ last index: 2026-11-11T04:17:54+00:00 (10456 ms)
 `stats` also prints the absolute root and index paths; the counts above are
 from the captured run.
 
-Inside a chat session the same facts are four tool calls, and `symbol_rename`
-adds the diff-first apply step.
+In a chat session the same lookups are tool calls; `symbol_rename` adds the
+diff-first apply step.
 
 ## Limits
 
 - **Python is AST-precise.** Symbols, references and rename come from `ast`.
 - **Other languages are definitions-only.** JavaScript, TypeScript, Go, Rust,
   Java, C/C++/C# get a line-based regex scan; `symbol_refs` for them is a
-  whole-word on-disk scan (20 MB cap), and rename is refused.
+  whole-word on-disk scan (20 MB and 2,000 files), and rename is refused.
 - **No type inference, no call graph.** `symbol_refs` is name-based.
 - **Rename scope.** Import aliases, `global`/`nonlocal`, `except ... as`,
   match-pattern names and keyword arguments (`f(old=1)`) produce warnings
@@ -141,7 +145,8 @@ adds the diff-first apply step.
 
 ## Privacy and disclosure
 
-The plugin reads source files under the roots you configure and writes only
+The plugin reads source files under the root it indexes (configured roots,
+else the session directory) and writes only
 its own SQLite index under `plugin-data/hermes-cartographer/`. It makes no
 network requests, spawns no shell, calls no model, and has no third-party
 dependencies.
@@ -166,7 +171,7 @@ $ hermes plugins validate . --install-deps
 ✓ security scan — safe
 ✓ no core override — no runtime rebinds of Hermes core
 ◆ Isolation — runs in the plugin host (plugins.isolation: host)
-  · ctx.register_cli_command() is skipped in the host (`hermes <command>` 
+  · ctx.register_cli_command() is skipped in the host (`hermes <command>`
 subcommands are wired into the local CLI parser)
 
 Validation passed.
