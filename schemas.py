@@ -4,6 +4,11 @@ from __future__ import annotations
 
 CODE_MAP = {
     "type": "object",
+    "description": (
+        "Show a compact symbol outline (classes, functions, methods with signatures) for a "
+        "codebase, path-relative and token-budgeted. Use this FIRST on an unfamiliar repo "
+        "instead of reading whole files. Path defaults to the current workspace."
+    ),
     "properties": {
         "path": {
             "type": "string",
@@ -24,6 +29,10 @@ CODE_MAP = {
 
 SYMBOL_FIND = {
     "type": "object",
+    "description": (
+        "Find where a symbol is defined: file, line, kind and signature. Use instead of grep "
+        "when you know the name."
+    ),
     "properties": {
         "name": {
             "type": "string",
@@ -54,6 +63,10 @@ SYMBOL_FIND = {
 
 SYMBOL_REFS = {
     "type": "object",
+    "description": (
+        "List every indexed reference to a symbol with file:line and the source line. Python "
+        "references are AST-precise; other languages are scanned on disk."
+    ),
     "properties": {
         "name": {
             "type": "string",
@@ -78,6 +91,12 @@ SYMBOL_REFS = {
 
 SYMBOL_RENAME = {
     "type": "object",
+    "description": (
+        "Rename a Python symbol across the whole repo by editing only real identifier "
+        "occurrences (AST-verified, syntax-checked before writing). Method renames always edit "
+        "`self.old(...)` call sites. Returns a unified diff. Defaults to dry_run=true; set false "
+        "to apply. Other languages are refused."
+    ),
     "properties": {
         "old": {
             "type": "string",

@@ -63,7 +63,7 @@ class IndexerTests(unittest.TestCase):
         self.assertEqual(store.symbols_for_path("core.py"), [])
         self.assertFalse(store.has_symbol("Engine"))
 
-    def test_report_counts_match_store(self):
+    def test_report_counts(self):
         report = self.run_sync()
         store = self.open_store()
         self.assertEqual(report.symbols, store.counts()["symbols"])

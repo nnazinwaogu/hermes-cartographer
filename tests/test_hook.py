@@ -64,6 +64,14 @@ class HookTests(unittest.TestCase):
     def settings(self, **kwargs):
         return Settings(roots=(ROOT,), **kwargs)
 
+    def test_inject_modes_and_budget(self):
+        self.assertIsNotNone(self.hook(self.settings(inject="first"), is_first_turn=True))
+        self.assertIsNone(self.hook(self.settings(inject="first"), is_first_turn=False))
+        self.assertIsNotNone(self.hook(self.settings(inject="always"), is_first_turn=False))
+        self.assertIsNone(self.hook(self.settings(inject="off"), is_first_turn=True))
+        context = self.hook(self.settings(map_budget=600))
+        self.assertLessEqual(len(context["context"]), 600)
+
     def test_inject_first_only_on_first_turn(self):
         context = self.hook(self.settings(inject="first"), is_first_turn=True)
         self.assertIn("[cartographer]", context["context"])
