@@ -26,6 +26,11 @@ def _ref_row(path: str, line: int, column: int, kind: str, snippet: str) -> dict
     return {"path": path, "line": line, "column": column, "kind": kind, "snippet": snippet}
 
 
+def outline(store: Store, subpath: str | None = None) -> list[dict]:
+    """Symbol rows ordered by ``(path, lineno)`` — the repo map's input."""
+    return store.outline_rows(subpath)
+
+
 def find_definitions(
     store: Store,
     name: str,

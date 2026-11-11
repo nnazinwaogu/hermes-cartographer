@@ -93,6 +93,12 @@ class PythonScanTests(unittest.TestCase):
         keys = {(r.name, r.lineno, r.col, r.kind) for r in scan.refs}
         self.assertEqual(len(keys), len(scan.refs))
 
+    def test_python_refs_multiline_attribute_uses_end_line(self):
+        source = 'value = (\n    "x"\n).upper()\n'
+        scan = languages.scan_python("multi.py", source)
+        upper = [(r.lineno, r.col, r.kind) for r in scan.refs if r.name == "upper"]
+        self.assertEqual(upper, [(3, 2, "attr")])
+
 
 class GenericScanTests(unittest.TestCase):
     def test_generic_js(self):

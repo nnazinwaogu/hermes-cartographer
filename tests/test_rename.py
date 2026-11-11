@@ -146,6 +146,20 @@ class RenameTests(unittest.TestCase):
         self.assertTrue(self.store.has_symbol("execute"))
         self.assertEqual(self.store.references("run", limit=None), [])
 
+    def test_multiline_attribute_call_renamed(self):
+        target = self.root / "multiline.py"
+        target.write_text(
+            "def use(engine):\n    return (\n        engine\n    ).run(1)\n", encoding="utf-8"
+        )
+        indexer.sync(self.root, Settings(), db_path=self.db)
+
+        plan = self.plan("run", "execute")
+        rename.apply_rename(self.root, self.store, plan, Settings())
+
+        text = target.read_text(encoding="utf-8")
+        self.assertIn(").execute(1)", text)
+        ast.parse(text)
+
     def test_non_ascii_byte_offsets(self):
         target = self.root / "unicode_case.py"
         target.write_text(

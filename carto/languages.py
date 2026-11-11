@@ -197,21 +197,26 @@ def collect_python_refs(tree: ast.AST, rel_path: str, lines: list[str]) -> list[
             if not isinstance(node.ctx, ast.Load) or len(name) <= 1 or name in _BUILTIN_NAMES:
                 continue
             kind = "name"
+            line = node.lineno
             col = node.col_offset
         elif isinstance(node, ast.Attribute):
             name = node.attr
             if len(name) <= 1:
                 continue
             kind = "attr"
+            # The attribute name sits at the END of the expression, so a value
+            # wrapped over lines (``(\n x\n).upper()``) puts it on end_lineno;
+            # node.lineno would point at the opening bracket.
+            line = node.end_lineno or node.lineno
             col = node.end_col_offset - len(name.encode("utf-8"))
         else:
             continue
 
-        key = (name, node.lineno, col, kind)
+        key = (name, line, col, kind)
         if key in seen:
             continue
         seen.add(key)
-        refs.append(Ref(rel_path, name, node.lineno, col, kind, _snippet(lines, node.lineno)))
+        refs.append(Ref(rel_path, name, line, col, kind, _snippet(lines, line)))
 
     refs.sort(key=lambda ref: (ref.lineno, ref.col))
     return refs

@@ -203,10 +203,14 @@ def _parse_slash_args(command: str, tokens: list[str]):
     while index < len(tokens):
         token = tokens[index]
         if token == "--attrs":
+            if command != "refs":
+                raise ValueError("--attrs is only valid for refs")
             attrs = True
             index += 1
             continue
         if token == "--budget" or token.startswith("--budget="):
+            if command != "map":
+                raise ValueError("--budget is only valid for map")
             if token.startswith("--budget="):
                 value = token.split("=", 1)[1]
                 index += 1

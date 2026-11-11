@@ -100,6 +100,11 @@ class HookTests(unittest.TestCase):
         self.assertIn("No index for", context["context"])
         self.assertIn("hermes carto index", context["context"])
 
+    def test_hook_passes_the_configured_budget_to_open_store(self):
+        with mock.patch.object(indexer, "open_store", wraps=indexer.open_store) as opened:
+            self.hook(self.settings(hook_index_ms=250))
+        self.assertEqual(opened.call_args.kwargs["time_budget_ms"], 250)
+
     def test_never_raises(self):
         with mock.patch.object(indexer, "open_store", side_effect=RuntimeError("db gone")):
             self.assertIsNone(self.hook(self.settings()))
@@ -110,7 +115,7 @@ class HookTests(unittest.TestCase):
         context = self.hook(self.settings())
         elapsed = time.monotonic() - started
         self.assertIsNotNone(context)
-        self.assertLess(elapsed, 2.0)
+        self.assertLess(elapsed, 1.0)
 
 
 class DetectRootTests(unittest.TestCase):

@@ -126,11 +126,10 @@ def _collect_edits(
         elif isinstance(node, ast.Attribute):
             if node.attr != old or not include_attributes:
                 continue
-            if node.end_lineno != node.lineno:
-                warnings.append(f"{path}:{node.lineno}: multi-line attribute '{old}' is not renamed")
-                continue
+            # The name is at the end of the expression: exact even when the
+            # receiver wraps over lines (``(\n obj\n).old()``).
             end = node.end_col_offset
-            add(node.lineno, end - len(old.encode("utf-8")), end)
+            add(node.end_lineno or node.lineno, end - len(old.encode("utf-8")), end)
 
     return edits
 

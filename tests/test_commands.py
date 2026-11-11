@@ -95,6 +95,8 @@ class CommandTests(unittest.TestCase):
         self.assertIn("unknown subcommand", plugin._slash("bogus"))
         self.assertIn("usage: carto find <name>", plugin._slash("find"))
         self.assertIn("not a directory", plugin._slash("index /definitely/not/here"))
+        self.assertIn("--attrs is only valid", plugin._slash("index --attrs"))
+        self.assertIn("--budget is only valid", plugin._slash("find Engine --budget 10"))
 
     def test_slash_never_raises(self):
         self.assertIsInstance(plugin._slash(None), str)

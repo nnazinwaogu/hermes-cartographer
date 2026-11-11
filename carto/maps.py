@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .query import outline
 from .store import Store
 
 _INDENT = "  "
@@ -37,7 +38,7 @@ def render_map(
     The truncation footer is appended outside the budget so the model never
     loses the "there is more here" signal to the cut.
     """
-    rows = store.outline_rows(subpath)
+    rows = outline(store, subpath)
     if not rows:
         return (
             f"(no symbols indexed for {root} — run `hermes carto index`)\n",

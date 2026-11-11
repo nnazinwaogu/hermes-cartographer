@@ -72,23 +72,24 @@ explicit step apart in `symbol_rename`.
 ## The 90-second tour
 
 ```
-# 1  index a real source tree
-$ hermes carto index ...\hermes-agent\tools
+# 1  index a real source tree (PowerShell)
+$repo = "$env:LOCALAPPDATA\hermes\hermes-agent\tools"
+hermes carto index $repo
 indexed 378 files · 9,219 symbols · 138,317 refs · 10,456 ms
 
 # 2  ask the agent instead of grepping
-$ hermes chat --in ...\tests\fixtures\project_a -q "Use symbol_find to locate class Engine. Reply with file:line only." --oneshot
+hermes chat --in .\tests\fixtures\project_a -q "Use symbol_find to locate class Engine. Reply with file:line only." --oneshot
 core.py:6
 
 # 3  locate a definition without grep
-$ hermes carto find dispatch ...\hermes-agent\tools
+hermes carto find dispatch $repo
 async_delegation_worker.py:43  method WorkerDelegationLedger.dispatch(self, record)
 browser_use_cli.py:837  method browser_exec.dispatch()
 code_kernel.py:224  method CellAuthority.dispatch(self, tool_name: str, tool_args: dict)
 registry.py:1069  method ToolRegistry.dispatch(self, name: str, args: dict, *, scope: Optional[str]=None, **kwargs)
 
 # 4  references before an edit
-$ hermes carto refs dispatch ...\hermes-agent\tools
+hermes carto refs dispatch $repo
 browser_use_cli.py:861:63  dispatched = run_fenced({"features": {"local": True}}, dispatch)
 browser_use_cli.py:863:21  dispatched = dispatch()
 code_execution_rpc.py:106:21  result = dispatch(tool_name, tool_args)
@@ -96,14 +97,15 @@ code_execution_rpc.py:106:21  result = dispatch(tool_name, tool_args)
 (scanned 1 non-Python files)
 
 # 5  what the index holds
-$ hermes carto stats ...\hermes-agent\tools
-root: ...\hermes-agent\tools
-index: ...\plugin-data\hermes-cartographer\index-58cccc113d7c.db (23100.0 KB)
+hermes carto stats $repo
 files: 378  symbols: 9219  refs: 138317
 languages: other 1, python 377
 kinds: class 368, constant 2129, function 4903, method 1819
 last index: 2026-11-11T04:17:54+00:00 (10456 ms)
 ```
+
+`stats` also prints the absolute root and index paths; the counts above are
+from the captured run.
 
 Inside a chat session the same facts are four tool calls, and `symbol_rename`
 adds the diff-first apply step.
@@ -124,6 +126,9 @@ source.
   match-pattern names and keyword arguments (`f(old=1)`) produce warnings
   rather than edits. Methods always rewrite `obj.old(...)` call sites; other
   attributes need `include_attributes=true`.
+- **Rename authority.** `symbol_rename` edits files under the `path` you pass
+  — the same filesystem authority as the agent's edit tools — and writes
+  nothing unless `dry_run` is explicitly `false`.
 - **Index caps.** Excluded directories, a 512 KB per-file cap and a 20,000
   file cap apply. A file that does not parse contributes no symbols and does
   not abort the sync.
@@ -182,9 +187,14 @@ $ hermes plugins doctor . --ci
 Stdlib only; tests are `unittest`:
 
 ```powershell
-python -m unittest discover -s tests -v
-hermes plugins validate . --install-deps
-hermes plugins doctor . --ci
+PS> python -m unittest discover -s tests -v
+...
+Ran 93 tests in 5.8s
+
+OK
+
+PS> hermes plugins validate . --install-deps    # Validation passed.
+PS> hermes plugins doctor . --ci                # 4 tool(s), 1 hook(s)
 ```
 
 Layout: `carto/` is the library (importable without Hermes), `tools.py` the
