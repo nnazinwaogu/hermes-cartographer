@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>hermes-cartographer — The Repo, Mapped</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0a0a; --alt:#181818; --surface:#242424;
+    --text:#ffffff; --muted:#b3afb6; --dim:#6f6b72; --line:#2a2a2a;
+    --accent:#4787f5;
+    --sans:Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono:"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --ease:cubic-bezier(.16,1,.3,1);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:#000;overflow:hidden}
+  body{display:grid;place-items:center;font-family:var(--sans);color:var(--text)}
+
+  #stage-wrap{position:fixed;inset:0;display:grid;place-items:center;background:#000}
+  #stage{
+    position:relative;width:1920px;height:1080px;overflow:hidden;
+    background-color:var(--bg);
+    background-image:radial-gradient(circle at 1px 1px, rgba(255,255,255,.055) 1px, transparent 0);
+    background-size:32px 32px;
+    transform-origin:center center;
+    isolation:isolate;
+  }
+
+  .frame{
+    position:absolute;inset:0;padding:92px 112px 108px;
+    display:none;flex-direction:column;
+  }
+  .frame.active{display:flex}
+  #stage.paused .frame.active, #stage.paused .frame.active *{animation-play-state:paused!important}
+
+  .top{display:flex;justify-content:space-between;align-items:baseline;gap:24px}
+  .label{font-size:12px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+  .label.accent{color:var(--accent)}
+  .label.dim{color:var(--dim)}
+  .label.rule{padding-top:14px;border-top:1px solid var(--line)}
+
+  .mono{font-family:var(--mono);font-variant-ligatures:none}
+  .accent{color:var(--accent)}
+  .muted{color:var(--muted)}
+  .dimtxt{color:var(--dim)}
+  .grow{flex:1}
+
+  /* ---------- frame 1 ---------- */
+  .f1-main{margin:auto 0;display:flex;flex-direction:column;gap:78px}
+  .cmd{display:flex;align-items:center;font-family:var(--mono);font-size:34px;line-height:1;color:var(--text)}
+  .cmd .sigil{color:var(--accent);margin-right:18px}
+  .type{display:inline-block;white-space:pre;overflow:hidden;width:0}
+  .frame.play .type{animation:type 1.15s steps(var(--n)) .2s both}
+  .caret{display:inline-block;width:.62ch;height:1.02em;background:var(--accent);margin-left:2px;transform:translateY(.06em);animation:blink 1s step-end infinite}
+  .stats{display:flex;gap:104px}
+  .stat b{display:block;font-size:92px;font-weight:700;letter-spacing:-.045em;line-height:.95;font-variant-numeric:tabular-nums}
+  .stat:last-child b{color:var(--accent)}
+  .stat span{display:block;margin-top:16px;font-size:12px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+  .f1-foot{display:flex;justify-content:space-between;align-items:flex-end}
+
+  /* ---------- frame 2 ---------- */
+  .f2-body{display:flex;gap:72px;margin-top:70px;align-items:flex-start;flex:1}
+  .f2-left{flex:1;min-width:0}
+  .h2{font-size:58px;line-height:1.04;font-weight:700;letter-spacing:-.035em;margin:14px 0 0;max-width:900px}
+  .h2 em{font-style:normal;color:var(--accent)}
+  .map{margin-top:44px;padding:34px 38px;background:rgba(24,24,24,.6);border:1px solid var(--line);font-family:var(--mono);font-size:21px;line-height:1.9;color:#eceaf0}
+  .map .ml{white-space:pre;opacity:0}
+  .frame.play .map .ml{animation:rise .45s var(--ease) both;animation-delay:var(--d)}
+  .map .file{color:var(--text)}
+  .map .kw{color:var(--dim)}
+  .map .fn{color:var(--accent)}
+  .map .ell{color:var(--dim)}
+  .map .capt{opacity:0;margin-top:18px;font-family:var(--sans);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+  .meter{width:330px;flex:none;border-left:1px solid var(--line);padding-left:52px;align-self:stretch;display:flex;flex-direction:column;justify-content:flex-start;padding-top:6px}
+  .meter .val{font-family:var(--mono);font-size:34px;letter-spacing:-.02em}
+  .meter .val small{font-size:14px;color:var(--muted);letter-spacing:.06em;margin-left:10px}
+  .bar{height:2px;background:#26262a;margin-top:26px;position:relative;overflow:hidden}
+  .bar i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--accent)}
+  .frame.play .bar i{animation:fill 1.2s var(--ease) .5s both}
+  .meter .note{margin-top:18px;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);line-height:1.9}
+  .hook-tag{display:inline-block;margin-top:34px;padding:10px 14px;border:1px solid var(--line);font-family:var(--mono);font-size:13px;color:var(--muted);letter-spacing:.04em}
+
+  /* ---------- frame 3 ---------- */
+  .f3-body{margin:auto 0;display:flex;flex-direction:column;gap:40px}
+  .query{font-family:var(--mono);font-size:44px;line-height:1.2;color:var(--text)}
+  .query .fn{color:var(--accent)}
+  .result{display:flex;align-items:flex-end;gap:28px;flex-wrap:wrap}
+  .result .path{font-family:var(--mono);font-size:96px;font-weight:600;letter-spacing:-.04em;line-height:1}
+  .result .line{font-family:var(--mono);font-size:96px;font-weight:600;color:var(--accent);letter-spacing:-.04em;line-height:1}
+  .sig{margin-top:10px;font-family:var(--mono);font-size:21px;color:var(--muted);max-width:1500px}
+  .f3-rule{height:1px;background:var(--line);margin-top:8px}
+
+  /* ---------- frame 4 ---------- */
+  .f4-body{display:flex;gap:80px;margin-top:64px;flex:1;min-height:0}
+  .f4-left{width:430px;flex:none;display:flex;flex-direction:column;justify-content:space-between}
+  .big-count{font-size:210px;font-weight:700;letter-spacing:-.06em;line-height:.85;color:var(--accent);font-variant-numeric:tabular-nums}
+  .f4-left .cap{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-top:22px}
+  .f4-left .sub{font-size:17px;color:var(--dim);max-width:330px;line-height:1.6;margin-top:26px}
+  .refs{flex:1;min-width:0;border-left:1px solid var(--line);padding-left:56px;display:flex;flex-direction:column;justify-content:center;gap:6px}
+  .refs-head{font-family:var(--mono);font-size:19px;color:var(--muted);margin-bottom:18px}
+  .ref{display:flex;gap:26px;font-family:var(--mono);font-size:18px;line-height:1.55;white-space:nowrap;overflow:hidden}
+  .ref .loc{color:var(--muted);flex:none;width:300px}
+  .ref .code{color:#e9e7ec;overflow:hidden;text-overflow:ellipsis}
+  .ref.more{color:var(--dim);font-family:var(--sans);font-size:13px;letter-spacing:.16em;text-transform:uppercase;margin-top:20px}
+
+  /* ---------- frame 5 ---------- */
+  .f5-body{margin:auto 0;display:flex;flex-direction:column;gap:30px}
+  .f5-call{font-family:var(--mono);font-size:20px;color:var(--muted)}
+  .diff{border:1px solid var(--line);background:rgba(24,24,24,.72);padding:34px 40px;font-family:var(--mono);font-size:23px;line-height:1.6;max-width:1560px}
+  .diff-line{white-space:pre}
+  .diff .del{color:#8f8a94}
+  .diff .add{color:var(--text)}
+  .diff .add b{color:var(--accent);font-weight:500}
+  .stamp{display:inline-block;align-self:flex-start;margin-top:6px;padding:12px 18px;border:1px solid var(--accent);color:var(--accent);font-size:12px;font-weight:600;letter-spacing:.2em;text-transform:uppercase}
+  .pills{display:flex;align-items:center;gap:16px;margin-top:8px}
+  .pill{padding:11px 18px;border:1px solid var(--line);font-family:var(--mono);font-size:14px;color:var(--muted)}
+  .pill.live{background:var(--accent);border-color:var(--accent);color:#05122c;font-weight:600}
+  .pill.arrow{color:var(--dim);font-family:var(--sans);padding:0}
+  .f5-meta{display:flex;justify-content:space-between;align-items:flex-end}
+
+  /* ---------- frame 6 ---------- */
+  .f6-body{margin:auto 0;display:flex;flex-direction:column;gap:30px;align-items:flex-start}
+  .install{font-family:var(--mono);font-size:30px;color:var(--text)}
+  .install .sigil{color:var(--accent);margin-right:16px}
+  .mark{font-size:104px;font-weight:800;letter-spacing:-.055em;line-height:.94;margin-top:26px}
+  .tagline{font-size:36px;color:var(--muted);letter-spacing:-.01em;margin-top:10px}
+  .f6-foot{display:flex;justify-content:space-between;align-items:flex-end;gap:24px}
+
+  /* ---------- motion primitives ---------- */
+  @keyframes type{from{width:0}to{width:calc(var(--n) * 1ch)}}
+  @keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+  @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+  @keyframes fadein{from{opacity:0}to{opacity:1}}
+  @keyframes fill{from{width:0}to{width:95.35%}}
+  @keyframes stampin{from{opacity:0;transform:scale(1.08)}to{opacity:1;transform:none}}
+  .rise{opacity:0}
+  .fade{opacity:0}
+  .frame.play .rise{animation:rise .6s var(--ease) both;animation-delay:var(--d,0s)}
+  .frame.play .fade{animation:fadein .5s linear both;animation-delay:var(--d,0s)}
+  .frame.play .stamp{animation:stampin .32s var(--ease) var(--d,1.45s) both}
+  .frame.play .map .capt{animation:fadein .4s linear both;animation-delay:var(--d,.72s)}
+  .frame.play .pill.live{animation:fadein .18s linear var(--d,1.9s) both}
+  .frame.play .ref{animation:rise .42s var(--ease) both;animation-delay:var(--d,0s)}
+  .frame.play .diff-line{animation:fadein .2s linear both;animation-delay:var(--d,0s)}
+
+  /* ---------- HUD ---------- */
+  .hud{position:absolute;left:112px;right:112px;bottom:40px;display:flex;align-items:center;gap:26px;color:var(--dim);font-size:11px;letter-spacing:.16em;text-transform:uppercase}
+  .progress{flex:1;height:2px;background:#202024;position:relative;overflow:hidden}
+  .progress i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--accent)}
+  .count{font-family:var(--mono);letter-spacing:.08em}
+  .hint{color:#4c494f}
+  @media (prefers-reduced-motion: reduce){
+    .caret{animation:none;opacity:1}
+  }
+</style>
+</head>
+<body>
+<div id="stage-wrap"><div id="stage">
+
+  <!-- 1 -->
+  <section class="frame" data-duration="4000" aria-label="Index">
+    <!-- frame:1 duration:4000 transition:fade -->
+    <div class="top">
+      <span class="label">hermes-cartographer</span>
+      <span class="label dim">01 / 06</span>
+    </div>
+    <div class="f1-main">
+      <div class="cmd">
+        <span class="sigil">&gt;</span><span class="type" style="--n:25">hermes carto index ./repo</span><span class="caret" aria-hidden="true"></span>
+      </div>
+      <div class="stats">
+        <div class="stat rise" style="--d:.55s"><b data-count="378">0</b><span>files</span></div>
+        <div class="stat rise" style="--d:.67s"><b data-count="9219">0</b><span>symbols</span></div>
+        <div class="stat rise" style="--d:.79s"><b data-count="138317">0</b><span>refs</span></div>
+        <div class="stat rise" style="--d:.91s"><b data-count="10456">0</b><span>milliseconds</span></div>
+      </div>
+    </div>
+    <div class="f1-foot">
+      <span class="label dim">incremental sqlite index</span>
+      <span class="label dim">no network</span>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section class="frame" data-duration="5000" aria-label="Repo map">
+    <!-- frame:2 duration:5000 transition:fade -->
+    <div class="top">
+      <span class="label accent">Turn one context</span>
+      <span class="label dim">02 / 06</span>
+    </div>
+    <div class="f2-body">
+      <div class="f2-left">
+        <p class="h2 rise">The map is already in context<br>before the first <em>read</em>.</p>
+        <div class="map">
+          <div class="ml" style="--d:.1s"><span class="file">registry.py  (1219)</span></div>
+          <div class="ml" style="--d:.22s"><span class="kw">  class</span> ToolRegistry</div>
+          <div class="ml" style="--d:.34s"><span class="kw">    def</span> <span class="fn">dispatch</span>(self, name: str, args: dict, *, scope: Optional[str]=None, **kwargs)</div>
+          <div class="ml ell" style="--d:.46s">    …</div>
+          <div class="capt" style="--d:.72s">pre_llm_call · first turn</div>
+        </div>
+        <div class="hook-tag rise" style="--d:.9s">+ one token-budgeted map, zero tool calls</div>
+      </div>
+      <div class="meter">
+        <div class="val rise" style="--d:.35s">3,814 <small>/ 4,000 chars</small></div>
+        <div class="bar"><i></i></div>
+        <div class="note rise" style="--d:.6s">map budget<br>truncated at a line boundary</div>
+      </div>
+    </div>
+    <div class="f1-foot">
+      <span class="label dim">symbol outline · signatures</span>
+      <span class="label dim">02 / 06</span>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section class="frame" data-duration="4000" aria-label="Find">
+    <!-- frame:3 duration:4000 transition:fade -->
+    <div class="top">
+      <span class="label accent">Find, don’t grep</span>
+      <span class="label dim">03 / 06</span>
+    </div>
+    <div class="f3-body">
+      <div class="query rise"><span class="fn">symbol_find</span>(<span class="muted">"dispatch"</span>)</div>
+      <div class="result">
+        <span class="path rise" style="--d:.65s">registry.py</span><span class="line rise" style="--d:.78s">:1069</span>
+      </div>
+      <div class="f3-rule fade" style="--d:1.05s"></div>
+      <div class="sig fade" style="--d:1.15s">ToolRegistry.dispatch(self, name: str, args: dict, *, scope: Optional[str]=None, **kwargs)</div>
+    </div>
+    <div class="f1-foot">
+      <span class="label dim">path · line · kind · signature</span>
+      <span class="label dim">03 / 06</span>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section class="frame" data-duration="4000" aria-label="References">
+    <!-- frame:4 duration:4000 transition:fade -->
+    <div class="top">
+      <span class="label accent">References</span>
+      <span class="label dim">04 / 06</span>
+    </div>
+    <div class="f4-body">
+      <div class="f4-left">
+        <div>
+          <div class="big-count rise" data-count="16">0</div>
+          <div class="cap rise" style="--d:.7s">call sites</div>
+        </div>
+        <div class="sub rise" style="--d:1.4s">AST-precise for Python.<br>Byte-exact columns, real source lines.</div>
+      </div>
+      <div class="refs">
+        <div class="refs-head fade" style="--d:.35s"><span class="accent">symbol_refs</span>("dispatch")</div>
+        <div class="ref" style="--d:.55s"><span class="loc">browser_use_cli.py:861:63</span><span class="code">dispatched = run_fenced({"features": {"local": True}}, dispatch)</span></div>
+        <div class="ref" style="--d:.67s"><span class="loc">browser_use_cli.py:863:21</span><span class="code">dispatched = dispatch()</span></div>
+        <div class="ref" style="--d:.79s"><span class="loc">code_execution_rpc.py:106:21</span><span class="code">result = dispatch(tool_name, tool_args)</span></div>
+        <div class="ref" style="--d:.91s"><span class="loc">code_execution_rpc.py:147:7</span><span class="code">if dispatch is None:</span></div>
+        <div class="ref" style="--d:1.03s"><span class="loc">code_execution_rpc.py:183:64</span><span class="code">max_tool_calls=max_tool_calls, dispatch=dispatch, tool_call_log=tool_call_log,</span></div>
+        <div class="ref more rise" style="--d:1.5s">+ 11 more</div>
+      </div>
+    </div>
+    <div class="f1-foot">
+      <span class="label dim">python · byte-exact</span>
+      <span class="label dim">04 / 06</span>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section class="frame" data-duration="5000" aria-label="Rename">
+    <!-- frame:5 duration:5000 transition:fade -->
+    <div class="top">
+      <span class="label accent">Rename</span>
+      <span class="label dim">05 / 06</span>
+    </div>
+    <div class="f5-body">
+      <div class="f5-call rise"><span class="accent">symbol_rename</span>("run", "execute")</div>
+      <div class="diff">
+        <div class="diff-line del" style="--d:.2s">-    def run(self, *units, retries: int = 1, **options):</div>
+        <div class="diff-line add" style="--d:.45s">+    def <b>execute</b>(self, *units, retries: int = 1, **options):</div>
+      </div>
+      <div class="stamp">Parsed before write</div>
+      <div class="pills">
+        <span class="pill">dry_run = true</span>
+        <span class="pill arrow">→</span>
+        <span class="pill live">applied</span>
+      </div>
+    </div>
+    <div class="f5-meta">
+      <span class="label dim">python · AST-safe · syntax-verified</span>
+      <span class="label dim">05 / 06</span>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section class="frame" data-duration="4000" aria-label="Close">
+    <!-- frame:6 duration:4000 transition:fade -->
+    <div class="top">
+      <span class="label">hermes-cartographer</span>
+      <span class="label dim">06 / 06</span>
+    </div>
+    <div class="f6-body">
+      <div class="install rise" style="--d:.05s"><span class="sigil">&gt;</span><span class="type" style="--n:42">hermes plugins install hermes-cartographer</span><span class="caret" aria-hidden="true"></span></div>
+      <div class="mark rise" style="--d:.9s">hermes-cartographer</div>
+      <div class="tagline rise" style="--d:1.25s">The repo, mapped. Before the first read.</div>
+    </div>
+    <div class="f6-foot">
+      <span class="label dim">no network · no model calls · MIT</span>
+      <span class="label dim">github.com/nnazinwaogu/hermes-cartographer</span>
+    </div>
+  </section>
+
+  <div class="hud">
+    <div class="progress"><i id="progress"></i></div>
+    <span class="count" hidden><span id="cur">01</span> / 06</span>
+  </div>
+
+</div></div>
+
+<script>
+(() => {
+  "use strict";
+  const stage = document.getElementById("stage");
+  const frames = Array.from(document.querySelectorAll(".frame"));
+  const durations = frames.map(f => Number(f.dataset.duration) || 3000);
+  const total = durations.reduce((a, b) => a + b, 0);
+  const progress = document.getElementById("progress");
+  const cur = document.getElementById("cur");
+
+  let startedAt = performance.now();
+  let pausedAt = 0;
+  let paused = false;
+  let current = -1;
+  let ended = false;
+  let raf = 0;
+  let counters = [];
+
+  function format(n, fmt) {
+    return fmt === "comma" ? n.toLocaleString("en-US") : String(n);
+  }
+
+  function countUp(el, target, ms) {
+    const fmt = el.dataset.fmt || (target >= 1000 ? "comma" : "plain");
+    const t0 = performance.now();
+    el.textContent = format(0, fmt);
+    function step(now) {
+      const p = Math.min(1, (now - t0) / ms);
+      const eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = format(Math.round(target * eased), fmt);
+      if (p < 1) counters.push(requestAnimationFrame(step));
+    }
+    counters.push(requestAnimationFrame(step));
+  }
+
+  function activate(index) {
+    current = index;
+    frames.forEach((f, i) => {
+      const on = i === index;
+      f.classList.toggle("active", on);
+      if (on) {
+        f.classList.remove("play");
+        void f.offsetWidth;
+        f.classList.add("play");
+      }
+    });
+    cur.textContent = String(index + 1).padStart(2, "0");
+    counters.forEach(cancelAnimationFrame);
+    counters = [];
+    frames[index].querySelectorAll("[data-count]").forEach(el => {
+      countUp(el, Number(el.dataset.count), 900);
+    });
+  }
+
+  function elapsed() {
+    return paused ? pausedAt - startedAt : performance.now() - startedAt;
+  }
+
+  function frameAt(t) {
+    let acc = 0;
+    for (let i = 0; i < durations.length; i++) {
+      if (t < acc + durations[i] || i === durations.length - 1) return { index: i, start: acc };
+      acc += durations[i];
+    }
+    return { index: 0, start: 0 };
+  }
+
+  function loop() {
+    const t = elapsed();
+    if (t >= total) {
+      const last = durations.length - 1;
+      if (current !== last) activate(last);
+      progress.style.width = "100%";
+      ended = true;
+      return;
+    }
+    const at = frameAt(t);
+    if (at.index !== current) activate(at.index);
+    progress.style.width = (t / total * 100).toFixed(3) + "%";
+    raf = requestAnimationFrame(loop);
+  }
+
+  function play() {
+    if (paused) {
+      startedAt += performance.now() - pausedAt;
+      paused = false;
+      stage.classList.remove("paused");
+    }
+    if (ended) {
+      ended = false;
+      startedAt = performance.now();
+      progress.style.width = "0";
+      activate(0);
+    }
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(loop);
+  }
+
+  function pause() {
+    if (paused || ended) return;
+    paused = true;
+    pausedAt = performance.now();
+    cancelAnimationFrame(raf);
+    stage.classList.add("paused");
+  }
+
+  function seekToStartOf(index) {
+    let acc = 0;
+    for (let i = 0; i < index; i++) acc += durations[i];
+    startedAt = performance.now() - acc;
+    paused = false;
+    ended = false;
+    stage.classList.remove("paused");
+    activate(index);
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(loop);
+  }
+
+  function next() {
+    if (ended) { seekToStartOf(0); return; }
+    seekToStartOf(Math.min(frames.length - 1, current + 1));
+  }
+
+  function prev() {
+    seekToStartOf(Math.max(0, current - 1));
+  }
+
+  stage.addEventListener("click", next);
+  window.addEventListener("keydown", e => {
+    if (e.key === "ArrowRight") { e.preventDefault(); next(); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); prev(); }
+    else if (e.key === " ") { e.preventDefault(); paused ? play() : pause(); }
+    else if (e.key === "r" || e.key === "R") { seekToStartOf(0); }
+  });
+
+  function fit() {
+    const scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    stage.style.transform = "scale(" + scale + ")";
+  }
+  window.addEventListener("resize", fit);
+
+  // deterministic inspection/recording hook
+  window.__carto = { seekToStartOf, pause, play, get frame() { return current; }, total };
+
+  fit();
+  activate(0);
+  raf = requestAnimationFrame(loop);
+})();
+</script>
+
+<!-- HYPERFRAMES_META: {"title":"hermes-cartographer — The Repo, Mapped","width":1920,"height":1080,"fps":30,"totalMs":26000,"frames":[{"frame":1,"startMs":0,"durationMs":4000,"transition":"fade","sceneSummary":"Index a repo: typed command, then 378 files / 9,219 symbols / 138,317 refs / 10,456 ms."},{"frame":2,"startMs":4000,"durationMs":5000,"transition":"fade","sceneSummary":"Turn-one context: the pre_llm_call hook injects a 3,814-char map of registry.py before any read."},{"frame":3,"startMs":9000,"durationMs":4000,"transition":"fade","sceneSummary":"Find, don't grep: symbol_find(dispatch) resolves registry.py:1069 with its signature."},{"frame":4,"startMs":13000,"durationMs":4000,"transition":"fade","sceneSummary":"References: 16 AST-precise call sites stream in with file:line:col and source."},{"frame":5,"startMs":17000,"durationMs":5000,"transition":"fade","sceneSummary":"Rename: dry-run diff for run to execute, parsed before write, then applied."},{"frame":6,"startMs":22000,"durationMs":4000,"transition":"fade","sceneSummary":"Close: install command, wordmark, tagline, no network / no model calls / MIT."}]} -->
+</body>
+</html>
