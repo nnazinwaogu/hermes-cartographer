@@ -8,7 +8,6 @@ calls, no shell, no third-party dependencies.
 
 Requires Hermes Agent 0.23.0 or newer. Standard library only (Python 3.10+).
 
-## Screenshots
 
 | | |
 | --- | --- |
