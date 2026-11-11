@@ -1,0 +1,49 @@
+name: hermes-cartographer
+label: Cartographer
+version: "1.0.0"
+description: "Code intelligence for Hermes Agent: a token-budgeted repo map, symbol definitions and references, deterministic first-turn context injection, and AST-safe cross-file rename for Python, backed by an incremental SQLite index. Reads source files under the roots you configure and writes only its own index under plugin-data/hermes-cartographer/. No network, no model calls, no shell, no third-party dependencies."
+author: "Nnazirim Nwaogu"
+homepage: https://github.com/nnazinwaogu/hermes-cartographer
+license: MIT
+kind: standalone
+requires_hermes: ">=0.23.0"
+provides_tools:
+  - code_map
+tags:
+  - code-intelligence
+  - navigation
+  - refactor
+  - symbols
+config_schema:
+  roots:
+    type: list
+    label: Workspace roots
+    description: Absolute paths to index. Empty means the current working directory when a session starts.
+    default: []
+  inject:
+    type: str
+    label: Context injection
+    description: Inject the repo map on the first turn, on every turn, or never.
+    choices: [first, always, off]
+    default: first
+  map_budget:
+    type: int
+    label: Injected map budget (characters)
+    description: How much repo map the pre_llm_call hook may inject.
+    default: 4000
+  default_map_budget:
+    type: int
+    label: code_map default budget (characters)
+    default: 6000
+  max_file_kb:
+    type: int
+    label: Skip files larger than (KB)
+    default: 512
+  max_files:
+    type: int
+    label: Stop indexing after (files)
+    default: 20000
+  excludes:
+    type: list
+    label: Extra excluded directory names
+    default: []
