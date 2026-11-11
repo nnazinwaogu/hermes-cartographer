@@ -152,6 +152,8 @@
   .progress{flex:1;height:2px;background:#202024;position:relative;overflow:hidden}
   .progress i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--accent)}
   .count{font-family:var(--mono);letter-spacing:.08em}
+  .sound{position:absolute;right:112px;bottom:72px;padding:10px 14px;border:1px solid var(--line);background:transparent;color:var(--muted);font:600 11px var(--sans);letter-spacing:.18em;text-transform:uppercase;cursor:pointer}
+  .sound:hover{color:var(--text);border-color:var(--muted)}
   .hint{color:#4c494f}
   @media (prefers-reduced-motion: reduce){
     .caret{animation:none;opacity:1}
@@ -317,6 +319,9 @@
     <span class="count" hidden><span id="cur">01</span> / 06</span>
   </div>
 
+  <button id="sound" type="button" class="sound">Sound on</button>
+  <audio id="mix" src="audio/mix.wav" preload="auto"></audio>
+
 </div></div>
 
 <script>
@@ -328,6 +333,18 @@
   const total = durations.reduce((a, b) => a + b, 0);
   const progress = document.getElementById("progress");
   const cur = document.getElementById("cur");
+  const mix = document.getElementById("mix");
+  const soundBtn = document.getElementById("sound");
+  const capture = new URLSearchParams(location.search).get("capture") === "1";
+
+  let soundOn = false;
+  let held = capture;
+
+  function syncAudio() {
+    if (!soundOn || !mix.duration) return;
+    const target = Math.min(elapsed() / 1000, mix.duration);
+    if (Math.abs(mix.currentTime - target) > 0.09) mix.currentTime = target;
+  }
 
   let startedAt = performance.now();
   let pausedAt = 0;
@@ -392,16 +409,24 @@
       const last = durations.length - 1;
       if (current !== last) activate(last);
       progress.style.width = "100%";
+      if (soundOn) mix.pause();
       ended = true;
       return;
     }
     const at = frameAt(t);
     if (at.index !== current) activate(at.index);
     progress.style.width = (t / total * 100).toFixed(3) + "%";
+    syncAudio();
     raf = requestAnimationFrame(loop);
   }
 
   function play() {
+    if (held) {
+      held = false;
+      startedAt = performance.now();
+      progress.style.width = "0";
+      activate(0);
+    }
     if (paused) {
       startedAt += performance.now() - pausedAt;
       paused = false;
@@ -415,6 +440,10 @@
     }
     cancelAnimationFrame(raf);
     raf = requestAnimationFrame(loop);
+    if (soundOn) {
+      mix.currentTime = elapsed() / 1000;
+      mix.play();
+    }
   }
 
   function pause() {
@@ -423,6 +452,7 @@
     pausedAt = performance.now();
     cancelAnimationFrame(raf);
     stage.classList.add("paused");
+    if (soundOn) mix.pause();
   }
 
   function seekToStartOf(index) {
@@ -435,6 +465,10 @@
     activate(index);
     cancelAnimationFrame(raf);
     raf = requestAnimationFrame(loop);
+    if (soundOn) {
+      mix.currentTime = elapsed() / 1000;
+      mix.play();
+    }
   }
 
   function next() {
@@ -446,13 +480,28 @@
     seekToStartOf(Math.max(0, current - 1));
   }
 
-  stage.addEventListener("click", next);
-  window.addEventListener("keydown", e => {
-    if (e.key === "ArrowRight") { e.preventDefault(); next(); }
-    else if (e.key === "ArrowLeft") { e.preventDefault(); prev(); }
-    else if (e.key === " ") { e.preventDefault(); paused ? play() : pause(); }
-    else if (e.key === "r" || e.key === "R") { seekToStartOf(0); }
+  if (!capture) {
+    stage.addEventListener("click", next);
+    window.addEventListener("keydown", e => {
+      if (e.key === "ArrowRight") { e.preventDefault(); next(); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); prev(); }
+      else if (e.key === " ") { e.preventDefault(); paused ? play() : pause(); }
+      else if (e.key === "r" || e.key === "R") { seekToStartOf(0); }
+    });
+  }
+
+  soundBtn.addEventListener("click", e => {
+    e.stopPropagation();
+    soundOn = true;
+    mix.currentTime = elapsed() / 1000;
+    mix.play();
+    soundBtn.hidden = true;
   });
+  mix.addEventListener("error", () => {
+    soundBtn.hidden = true;
+    soundOn = false;
+  });
+  if (capture) soundBtn.hidden = true;
 
   function fit() {
     const scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
@@ -465,7 +514,7 @@
 
   fit();
   activate(0);
-  raf = requestAnimationFrame(loop);
+  if (!capture) raf = requestAnimationFrame(loop);
 })();
 </script>
 

@@ -1,0 +1,43 @@
+{
+  "sampleRate": 48000,
+  "channels": 2,
+  "durationMs": 26600,
+  "bed": {
+    "bpm": 120,
+    "notes": [110.0, 130.8128, 164.8138, 220.0],
+    "duck": [{ "fromMs": 17000, "toMs": 21900, "db": -9 }]
+  },
+  "events": [
+    { "atMs": 0, "sample": "boom", "db": -12 },
+    { "typing": { "fromMs": 200, "toMs": 1350, "chars": 25, "every": 2, "sample": "click", "db": -24 } },
+    { "atMs": 550, "sample": "tick", "db": -22 },
+    { "atMs": 670, "sample": "tick", "db": -21 },
+    { "atMs": 790, "sample": "tick", "db": -20 },
+    { "atMs": 910, "sample": "tick", "db": -19 },
+    { "atMs": 3880, "sample": "whoosh", "db": -20 },
+    { "atMs": 4100, "sample": "tick", "db": -24 },
+    { "atMs": 4220, "sample": "tick", "db": -24 },
+    { "atMs": 4340, "sample": "tick", "db": -24 },
+    { "atMs": 4460, "sample": "tick", "db": -24 },
+    { "atMs": 4500, "sample": "sweep", "db": -26 },
+    { "atMs": 8880, "sample": "whoosh", "db": -20 },
+    { "atMs": 9060, "sample": "tick", "db": -24 },
+    { "atMs": 9650, "sample": "bell", "db": -16 },
+    { "atMs": 12880, "sample": "whoosh", "db": -20 },
+    { "atMs": 13550, "sample": "tick", "db": -24 },
+    { "atMs": 13670, "sample": "tick", "db": -23 },
+    { "atMs": 13790, "sample": "tick", "db": -22 },
+    { "atMs": 13910, "sample": "tick", "db": -21 },
+    { "atMs": 14030, "sample": "tick", "db": -20 },
+    { "atMs": 15000, "sample": "tick", "db": -22 },
+    { "atMs": 16880, "sample": "whoosh", "db": -22 },
+    { "atMs": 17100, "sample": "click", "db": -22 },
+    { "atMs": 17200, "sample": "click", "db": -24 },
+    { "atMs": 17450, "sample": "click", "db": -24 },
+    { "atMs": 18450, "sample": "thud", "db": -16 },
+    { "atMs": 18900, "sample": "blip", "db": -20 },
+    { "atMs": 22000, "sample": "chime", "db": -14 },
+    { "typing": { "fromMs": 22250, "toMs": 23400, "chars": 42, "every": 3, "sample": "click", "db": -28 } },
+    { "atMs": 25000, "sample": "bell", "db": -24 }
+  ]
+}
